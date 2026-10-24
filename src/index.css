@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --netflix-black: #141414;
+    --netflix-dark: #181818;
+    --netflix-card: #202020;
+    --netflix-red: #E50914;
+    --netflix-red-hover: #b80710;
+  }
+
+  body {
+    background-color: #141414;
+    color: #ffffff;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Custom scrollbars for Netflix feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #141414;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Brand display font for skills.ON! */
+.font-brand {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.05em;
+}

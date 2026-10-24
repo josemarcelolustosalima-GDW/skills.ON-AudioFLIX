@@ -1,0 +1,7 @@
+{
+  "name": "skills.ON!",
+  "description": "Plataforma de streaming de áudio séries e treinamentos no padrão Netflix com gestão de episódios, player imersivo e painel administrativo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
