@@ -13,13 +13,14 @@ import {
   Minimize2,
   ThumbsUp,
   ThumbsDown,
-  Heart,
   HardDrive,
-  Info,
   ListMusic,
-  X,
-  Sparkles,
   Clock,
+  AlertTriangle,
+  ExternalLink,
+  RefreshCw,
+  Loader2,
+  Tv,
 } from 'lucide-react';
 import { formatTime } from '../utils/audioResolver';
 
@@ -34,6 +35,13 @@ export const AudioPlayer: React.FC = () => {
     volume,
     isMuted,
     audioSourceInfo,
+    audioError,
+    audioLoading,
+    isUsingEmbedPlayer,
+    toggleEmbedPlayer,
+    retryPlayback,
+    drivePreviewEmbedUrl,
+    driveDirectWebUrl,
     togglePlayPause,
     seekTo,
     skipSeconds,
@@ -50,7 +58,6 @@ export const AudioPlayer: React.FC = () => {
   } = useApp();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
 
   if (!currentPlayingEpisode) return null;
@@ -68,15 +75,13 @@ export const AudioPlayer: React.FC = () => {
     seekTo(val);
   };
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-
   return (
     <>
       {/* EXPANDED FULLSCREEN THEATER VIEW */}
       {isExpanded && (
-        <div className="fixed inset-0 z-50 bg-[#141414] flex flex-col justify-between p-6 md:p-12 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 bg-[#141414] flex flex-col justify-between p-6 md:p-12 animate-in fade-in duration-300 overflow-y-auto">
           {/* Top Bar in Theater Mode */}
-          <div className="flex items-center justify-between pb-4 border-b border-neutral-800">
+          <div className="flex items-center justify-between pb-4 border-b border-neutral-800 shrink-0">
             <div className="flex items-center gap-2">
               <span className="text-xl font-bold tracking-tight text-[#E50914] font-brand">
                 skills<span className="text-white">.ON!</span>
@@ -86,6 +91,21 @@ export const AudioPlayer: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3">
+              {drivePreviewEmbedUrl && (
+                <button
+                  onClick={() => toggleEmbedPlayer(!isUsingEmbedPlayer)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${
+                    isUsingEmbedPlayer
+                      ? 'bg-blue-600 border-blue-500 text-white'
+                      : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:text-white'
+                  }`}
+                  title="Alternar entre Player Nativo e Player Embutido do Google Drive"
+                >
+                  <Tv className="w-4 h-4" />
+                  <span>{isUsingEmbedPlayer ? 'Player Embutido Ativo' : 'Player Google Drive'}</span>
+                </button>
+              )}
+
               <button
                 onClick={() => setShowQueue(!showQueue)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${
@@ -100,7 +120,7 @@ export const AudioPlayer: React.FC = () => {
 
               <button
                 onClick={() => setIsExpanded(false)}
-                className="p-2 rounded-full bg-neutral-800 hover:bg-neutral-700 text-white transition-colors"
+                className="p-2 rounded-full bg-neutral-800 hover:bg-neutral-700 text-white transition-colors cursor-pointer"
                 title="Minimizar player"
               >
                 <Minimize2 className="w-5 h-5" />
@@ -108,32 +128,60 @@ export const AudioPlayer: React.FC = () => {
             </div>
           </div>
 
-          {/* Center: Stage with large artwork, waveforms, and synopsis */}
+          {/* Center: Stage with artwork / embed player */}
           <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16 py-6 max-w-5xl mx-auto w-full">
-            {/* Artwork Card */}
-            <div className="relative aspect-video w-full max-w-md md:max-w-lg rounded-xl overflow-hidden shadow-2xl border border-neutral-800 group">
-              <img
-                src={currentPlayingEpisode.imageUrl || currentPlayingSeries?.heroImage}
-                alt={currentPlayingEpisode.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-              
-              {/* Audio Waveform animation overlay */}
-              <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-1 h-8">
-                {Array.from({ length: 24 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-1 rounded-full bg-[#E50914] transition-all duration-150 ${
-                      isPlaying ? 'animate-pulse' : 'opacity-40'
-                    }`}
-                    style={{
-                      height: isPlaying ? `${Math.max(15, (Math.sin(i * 0.8 + currentTime * 3) + 1) * 50)}%` : '20%',
-                      animationDelay: `${i * 40}ms`,
-                    }}
+            {/* Artwork Card or Google Drive Embed Player */}
+            <div className="w-full max-w-md md:max-w-lg">
+              {isUsingEmbedPlayer && drivePreviewEmbedUrl ? (
+                <div className="w-full bg-neutral-900 border border-blue-500/40 rounded-xl p-4 shadow-2xl space-y-3">
+                  <div className="flex items-center justify-between text-xs text-blue-400 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <HardDrive className="w-4 h-4" />
+                      Player Oficial do Google Drive (Nativo)
+                    </span>
+                    <button
+                      onClick={() => toggleEmbedPlayer(false)}
+                      className="text-neutral-400 hover:text-white underline text-[11px]"
+                    >
+                      Voltar ao Player da Plataforma
+                    </button>
+                  </div>
+                  <iframe
+                    src={drivePreviewEmbedUrl}
+                    className="w-full h-44 rounded-lg bg-black border border-neutral-800"
+                    allow="autoplay"
+                    title="Google Drive Audio Preview"
                   />
-                ))}
-              </div>
+                  <p className="text-[11px] text-neutral-400 text-center">
+                    Este player oficial do Google Drive reproduz áudios mesmo com restrições de antivírus do Google.
+                  </p>
+                </div>
+              ) : (
+                <div className="relative aspect-video w-full rounded-xl overflow-hidden shadow-2xl border border-neutral-800 group">
+                  <img
+                    src={currentPlayingEpisode.imageUrl || currentPlayingSeries?.heroImage}
+                    alt={currentPlayingEpisode.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                  
+                  {/* Audio Waveform animation overlay */}
+                  <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-1 h-8">
+                    {Array.from({ length: 24 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-1 rounded-full bg-[#E50914] transition-all duration-150 ${
+                          isPlaying ? 'animate-pulse' : 'opacity-40'
+                        }`}
+                        style={{
+                          height: isPlaying ? `${Math.max(15, (Math.sin(i * 0.8 + currentTime * 3) + 1) * 50)}%` : '20%',
+                          animationDelay: `${i * 40}ms`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Info and Details */}
@@ -158,7 +206,7 @@ export const AudioPlayer: React.FC = () => {
                 {currentPlayingEpisode.synopsis}
               </p>
 
-              {/* Episode Duration Display (Requirement 4) */}
+              {/* Episode Duration Display */}
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-1">
                 <span className="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
@@ -176,7 +224,7 @@ export const AudioPlayer: React.FC = () => {
                 {audioSourceInfo.isGoogleDrive && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-blue-500/10 border border-blue-500/30 text-xs font-semibold text-blue-400">
                     <HardDrive className="w-3.5 h-3.5" />
-                    Google Drive Stream Ativo
+                    Google Drive Stream Conectado
                   </span>
                 )}
                 {currentPlayingSeries && (
@@ -198,7 +246,7 @@ export const AudioPlayer: React.FC = () => {
                   <button
                     key={ep.id}
                     onClick={() => playEpisode(ep, currentPlayingSeries || undefined)}
-                    className={`w-full text-left px-3 py-2 rounded flex items-center justify-between text-xs transition-colors ${
+                    className={`w-full text-left px-3 py-2 rounded flex items-center justify-between text-xs transition-colors cursor-pointer ${
                       ep.id === currentPlayingEpisode.id
                         ? 'bg-[#E50914]/20 text-[#E50914] font-bold border border-[#E50914]/40'
                         : 'text-neutral-300 hover:bg-neutral-800'
@@ -214,8 +262,46 @@ export const AudioPlayer: React.FC = () => {
             </div>
           )}
 
+          {/* Diagnostic banner if error in Theater mode */}
+          {audioError && (
+            <div className="mb-3 max-w-4xl mx-auto w-full p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-xs text-amber-300 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{audioError}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {drivePreviewEmbedUrl && !isUsingEmbedPlayer && (
+                  <button
+                    onClick={() => toggleEmbedPlayer(true)}
+                    className="px-3 py-1 rounded bg-amber-500 text-black font-bold hover:bg-amber-400 transition-colors"
+                  >
+                    Ativar Player Seguro Drive
+                  </button>
+                )}
+                {driveDirectWebUrl && (
+                  <a
+                    href={driveDirectWebUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1 rounded bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-700 flex items-center gap-1"
+                  >
+                    <span>Abrir no Drive</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+                <button
+                  onClick={retryPlayback}
+                  className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700"
+                  title="Tentar recarregar"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Controls Bar in Theater Mode */}
-          <div className="pt-4 border-t border-neutral-800 max-w-4xl mx-auto w-full space-y-3">
+          <div className="pt-4 border-t border-neutral-800 max-w-4xl mx-auto w-full space-y-3 shrink-0">
             {/* Seeker */}
             <div className="flex items-center gap-3">
               <span className="text-xs font-mono tabular-nums text-neutral-400 w-12 text-right">
@@ -244,7 +330,7 @@ export const AudioPlayer: React.FC = () => {
                   <>
                     <button
                       onClick={() => toggleReaction(currentPlayingSeries.id, 'like')}
-                      className={`p-2 rounded-full transition-colors ${
+                      className={`p-2 rounded-full transition-colors cursor-pointer ${
                         currentReaction === 'like' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
                       }`}
                       title="Gostei"
@@ -253,7 +339,7 @@ export const AudioPlayer: React.FC = () => {
                     </button>
                     <button
                       onClick={() => toggleReaction(currentPlayingSeries.id, 'dislike')}
-                      className={`p-2 rounded-full transition-colors ${
+                      className={`p-2 rounded-full transition-colors cursor-pointer ${
                         currentReaction === 'dislike' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
                       }`}
                       title="Não é para mim"
@@ -268,7 +354,7 @@ export const AudioPlayer: React.FC = () => {
               <div className="flex items-center gap-4">
                 <button
                   onClick={prevEpisode}
-                  className="p-2 text-neutral-300 hover:text-white transition-colors"
+                  className="p-2 text-neutral-300 hover:text-white transition-colors cursor-pointer"
                   title="Episódio Anterior"
                 >
                   <SkipBack className="w-5 h-5" />
@@ -276,7 +362,7 @@ export const AudioPlayer: React.FC = () => {
 
                 <button
                   onClick={() => skipSeconds(-10)}
-                  className="p-2 text-neutral-300 hover:text-white transition-colors flex items-center gap-0.5"
+                  className="p-2 text-neutral-300 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer"
                   title="Voltar 10 segundos"
                 >
                   <RotateCcw className="w-5 h-5" />
@@ -285,10 +371,13 @@ export const AudioPlayer: React.FC = () => {
 
                 <button
                   onClick={togglePlayPause}
-                  className="w-14 h-14 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-transform active:scale-95 shadow-xl"
+                  disabled={audioLoading}
+                  className="w-14 h-14 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-transform active:scale-95 shadow-xl cursor-pointer disabled:opacity-80"
                   title={isPlaying ? 'Pausar' : 'Reproduzir'}
                 >
-                  {isPlaying ? (
+                  {audioLoading ? (
+                    <Loader2 className="w-6 h-6 text-black animate-spin" />
+                  ) : isPlaying ? (
                     <Pause className="w-6 h-6 fill-black" />
                   ) : (
                     <Play className="w-6 h-6 fill-black translate-x-0.5" />
@@ -297,7 +386,7 @@ export const AudioPlayer: React.FC = () => {
 
                 <button
                   onClick={() => skipSeconds(10)}
-                  className="p-2 text-neutral-300 hover:text-white transition-colors flex items-center gap-0.5"
+                  className="p-2 text-neutral-300 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer"
                   title="Avançar 10 segundos"
                 >
                   <RotateCw className="w-5 h-5" />
@@ -306,7 +395,7 @@ export const AudioPlayer: React.FC = () => {
 
                 <button
                   onClick={nextEpisode}
-                  className="p-2 text-neutral-300 hover:text-white transition-colors"
+                  className="p-2 text-neutral-300 hover:text-white transition-colors cursor-pointer"
                   title="Próximo Episódio"
                 >
                   <SkipForward className="w-5 h-5" />
@@ -320,13 +409,13 @@ export const AudioPlayer: React.FC = () => {
                     const nextIdx = (speedOptions.indexOf(playbackRate) + 1) % speedOptions.length;
                     setSpeed(speedOptions[nextIdx]);
                   }}
-                  className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-white transition-colors border border-neutral-700"
+                  className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-white transition-colors border border-neutral-700 cursor-pointer"
                 >
                   {playbackRate}x
                 </button>
 
                 <div className="flex items-center gap-2">
-                  <button onClick={toggleMute} className="text-neutral-300 hover:text-white">
+                  <button onClick={toggleMute} className="text-neutral-300 hover:text-white cursor-pointer">
                     {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                   </button>
                   <input
@@ -346,8 +435,70 @@ export const AudioPlayer: React.FC = () => {
       )}
 
       {/* DOCKED BOTTOM BAR AUDIO PLAYER (Always Visible When Audio Loaded) */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#181818]/95 backdrop-blur-md border-t border-neutral-800 shadow-2xl px-4 md:px-8 py-2 md:py-3 select-none">
-        <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#181818]/95 backdrop-blur-md border-t border-neutral-800 shadow-2xl select-none">
+        {/* Error notification banner if any */}
+        {audioError && (
+          <div className="bg-amber-950/80 border-b border-amber-500/40 px-4 py-1.5 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>{audioError}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {drivePreviewEmbedUrl && (
+                <button
+                  onClick={() => toggleEmbedPlayer(!isUsingEmbedPlayer)}
+                  className="px-2 py-0.5 rounded bg-amber-400 text-black text-[11px] font-bold hover:bg-amber-300 transition-colors"
+                >
+                  {isUsingEmbedPlayer ? 'Ocultar Player Drive' : 'Abrir Player Seguro Drive'}
+                </button>
+              )}
+              {driveDirectWebUrl && (
+                <a
+                  href={driveDirectWebUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 text-[11px] flex items-center gap-1"
+                >
+                  <span>Abrir no Drive</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+              <button
+                onClick={retryPlayback}
+                className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 text-[11px]"
+                title="Tentar novamente"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Embedded player drawer if active */}
+        {isUsingEmbedPlayer && drivePreviewEmbedUrl && (
+          <div className="bg-neutral-900 border-b border-blue-500/30 p-3 max-w-4xl mx-auto">
+            <div className="flex items-center justify-between mb-1.5 text-xs text-blue-400 font-bold">
+              <span className="flex items-center gap-1.5">
+                <HardDrive className="w-3.5 h-3.5" />
+                Player Embutido do Google Drive
+              </span>
+              <button
+                onClick={() => toggleEmbedPlayer(false)}
+                className="text-neutral-400 hover:text-white text-[11px] underline cursor-pointer"
+              >
+                Fechar Player Embutido
+              </button>
+            </div>
+            <iframe
+              src={drivePreviewEmbedUrl}
+              className="w-full h-32 rounded-lg bg-black border border-neutral-800"
+              allow="autoplay"
+              title="Google Drive Audio Stream"
+            />
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto px-4 md:px-8 py-2 md:py-3">
           {/* Left: Thumbnail & Episode Meta */}
           <div className="flex items-center gap-3 w-1/4 min-w-[180px]">
             <div
@@ -382,7 +533,7 @@ export const AudioPlayer: React.FC = () => {
             {currentPlayingSeries && (
               <button
                 onClick={() => toggleReaction(currentPlayingSeries.id, 'like')}
-                className={`p-1.5 rounded-full hover:bg-neutral-800 transition-colors hidden sm:block ${
+                className={`p-1.5 rounded-full hover:bg-neutral-800 transition-colors hidden sm:block cursor-pointer ${
                   currentReaction === 'like' || currentReaction === 'double_like'
                     ? 'text-[#E50914]'
                     : 'text-neutral-400 hover:text-white'
@@ -400,7 +551,7 @@ export const AudioPlayer: React.FC = () => {
             <div className="flex items-center gap-3 md:gap-5 mb-1.5">
               <button
                 onClick={prevEpisode}
-                className="p-1 text-neutral-400 hover:text-white transition-colors"
+                className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
                 title="Episódio Anterior"
               >
                 <SkipBack className="w-4 h-4" />
@@ -408,7 +559,7 @@ export const AudioPlayer: React.FC = () => {
 
               <button
                 onClick={() => skipSeconds(-10)}
-                className="p-1 text-neutral-400 hover:text-white transition-colors flex items-center gap-0.5"
+                className="p-1 text-neutral-400 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer"
                 title="Voltar 10 segundos"
               >
                 <RotateCcw className="w-4 h-4" />
@@ -417,10 +568,13 @@ export const AudioPlayer: React.FC = () => {
 
               <button
                 onClick={togglePlayPause}
-                className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-transform active:scale-95 shadow-md"
+                disabled={audioLoading}
+                className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-transform active:scale-95 shadow-md cursor-pointer disabled:opacity-80"
                 title={isPlaying ? 'Pausar' : 'Reproduzir'}
               >
-                {isPlaying ? (
+                {audioLoading ? (
+                  <Loader2 className="w-4 h-4 text-black animate-spin" />
+                ) : isPlaying ? (
                   <Pause className="w-4 h-4 fill-black" />
                 ) : (
                   <Play className="w-4 h-4 fill-black translate-x-0.5" />
@@ -429,7 +583,7 @@ export const AudioPlayer: React.FC = () => {
 
               <button
                 onClick={() => skipSeconds(10)}
-                className="p-1 text-neutral-400 hover:text-white transition-colors flex items-center gap-0.5"
+                className="p-1 text-neutral-400 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer"
                 title="Avançar 10 segundos"
               >
                 <RotateCw className="w-4 h-4" />
@@ -438,7 +592,7 @@ export const AudioPlayer: React.FC = () => {
 
               <button
                 onClick={nextEpisode}
-                className="p-1 text-neutral-400 hover:text-white transition-colors"
+                className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
                 title="Próximo Episódio"
               >
                 <SkipForward className="w-4 h-4" />
@@ -474,26 +628,31 @@ export const AudioPlayer: React.FC = () => {
                 const nextIdx = (speedOptions.indexOf(playbackRate) + 1) % speedOptions.length;
                 setSpeed(speedOptions[nextIdx]);
               }}
-              className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-bold text-white transition-colors border border-neutral-700"
+              className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-bold text-white transition-colors border border-neutral-700 cursor-pointer"
               title="Velocidade de reprodução"
             >
               {playbackRate}x
             </button>
 
-            {/* Drive indicator badge */}
-            {audioSourceInfo.isGoogleDrive && (
-              <span
-                className="hidden lg:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-bold border border-blue-500/20"
-                title="Áudio carregado diretamente via Google Drive Stream"
+            {/* Drive indicator badge & Toggle */}
+            {audioSourceInfo.isGoogleDrive && drivePreviewEmbedUrl && (
+              <button
+                onClick={() => toggleEmbedPlayer(!isUsingEmbedPlayer)}
+                className={`hidden lg:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                  isUsingEmbedPlayer
+                    ? 'bg-blue-600 text-white border-blue-500'
+                    : 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20'
+                }`}
+                title="Alternar para o Player Oficial do Google Drive"
               >
                 <HardDrive className="w-3 h-3" />
-                Drive
-              </span>
+                <span>{isUsingEmbedPlayer ? 'Drive Ativo' : 'Drive'}</span>
+              </button>
             )}
 
             {/* Volume control */}
             <div className="hidden sm:flex items-center gap-1.5">
-              <button onClick={toggleMute} className="text-neutral-400 hover:text-white p-1">
+              <button onClick={toggleMute} className="text-neutral-400 hover:text-white p-1 cursor-pointer">
                 {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
               <input
@@ -510,7 +669,7 @@ export const AudioPlayer: React.FC = () => {
             {/* Maximize theater mode */}
             <button
               onClick={() => setIsExpanded(true)}
-              className="p-1.5 text-neutral-400 hover:text-white transition-colors"
+              className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
               title="Modo tela cheia"
             >
               <Maximize2 className="w-4 h-4" />

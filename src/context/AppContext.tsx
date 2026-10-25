@@ -18,6 +18,13 @@ interface AppContextType {
   volume: number;
   isMuted: boolean;
   audioSourceInfo: { isGoogleDrive: boolean; streamUrl: string };
+  audioCandidateUrls: string[];
+  currentCandidateIndex: number;
+  isUsingEmbedPlayer: boolean;
+  audioError: string | null;
+  audioLoading: boolean;
+  drivePreviewEmbedUrl: string | null;
+  driveDirectWebUrl: string | null;
   selectedSeriesForModal: AudioSeries | null;
   currentView: 'home' | 'series_catalog' | 'my_list' | 'top_rated' | 'admin';
   searchQuery: string;
@@ -28,6 +35,8 @@ interface AppContextType {
   
   // Actions
   playEpisode: (episode: AudioEpisode, series?: AudioSeries) => void;
+  toggleEmbedPlayer: (useEmbed?: boolean) => void;
+  retryPlayback: () => void;
   togglePlayPause: () => void;
   seekTo: (time: number) => void;
   skipSeconds: (seconds: number) => void;
@@ -170,7 +179,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     streamUrl: '',
   });
 
+  // Multi-candidate stream and failover state
+  const [audioCandidateUrls, setAudioCandidateUrls] = useState<string[]>([]);
+  const [currentCandidateIndex, setCurrentCandidateIndex] = useState<number>(0);
+  const [isUsingEmbedPlayer, setIsUsingEmbedPlayer] = useState<boolean>(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioLoading, setAudioLoading] = useState<boolean>(false);
+  const [drivePreviewEmbedUrl, setDrivePreviewEmbedUrl] = useState<string | null>(null);
+  const [driveDirectWebUrl, setDriveDirectWebUrl] = useState<string | null>(null);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const candidateUrlsRef = useRef<string[]>([]);
+  const candidateIdxRef = useRef<number>(0);
+  const isGoogleDriveRef = useRef<boolean>(false);
 
   // Current user derived
   const currentUser = allUsers.find(u => u.id === currentUserId) || allUsers[0];
@@ -224,7 +245,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [supabaseConfig]);
 
-  // Audio element events binding
+  // Audio element events binding with smart failover
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -259,29 +280,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setDuration(audio.duration);
     };
 
+    const onCanPlay = () => {
+      setAudioLoading(false);
+      setAudioError(null);
+    };
+
+    const onPlaying = () => {
+      setAudioLoading(false);
+      setIsPlaying(true);
+      setAudioError(null);
+    };
+
+    const onWaiting = () => {
+      setAudioLoading(true);
+    };
+
     const onEnded = () => {
       setIsPlaying(false);
       nextEpisode();
     };
 
     const onError = () => {
-      console.warn('Audio playback error on stream URL:', audio.src);
+      console.warn('[Audio] Playback error on candidate stream:', audio.src);
+      const nextIdx = candidateIdxRef.current + 1;
+      const candidates = candidateUrlsRef.current;
+
+      if (nextIdx < candidates.length) {
+        console.log(`[Audio] Auto-failing over to stream candidate #${nextIdx}: ${candidates[nextIdx]}`);
+        candidateIdxRef.current = nextIdx;
+        setCurrentCandidateIndex(nextIdx);
+        setAudioSourceInfo(prev => ({ ...prev, streamUrl: candidates[nextIdx] }));
+        audio.src = candidates[nextIdx];
+        audio.load();
+        audio.play().catch(e => console.warn('[Audio] Failover retry error:', e));
+      } else {
+        console.warn('[Audio] All direct stream candidates exhausted');
+        setAudioLoading(false);
+        setIsPlaying(false);
+        if (isGoogleDriveRef.current) {
+          setAudioError('O Google Drive bloqueou o streaming direto HTML5 para este arquivo (bloqueio de antivírus/CORS). Ativando o Player Seguro Integrado do Google Drive...');
+          setIsUsingEmbedPlayer(true);
+        } else {
+          setAudioError('Não foi possível carregar este áudio. Verifique se o link está acessível.');
+        }
+      }
     };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('canplay', onCanPlay);
+    audio.addEventListener('playing', onPlaying);
+    audio.addEventListener('waiting', onWaiting);
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('error', onError);
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('canplay', onCanPlay);
+      audio.removeEventListener('playing', onPlaying);
+      audio.removeEventListener('waiting', onWaiting);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
     };
   }, [currentPlayingEpisode, currentUser.id]);
 
-  // Play episode action
+  // Play episode action with multi-candidate generation
   const playEpisode = (episode: AudioEpisode, targetSeries?: AudioSeries) => {
     const parentSeries = targetSeries || series.find(s => s.id === episode.seriesId) || null;
     setCurrentPlayingEpisode(episode);
@@ -292,17 +356,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isGoogleDrive: resolved.isGoogleDrive,
       streamUrl: resolved.streamUrl,
     });
+    setAudioCandidateUrls(resolved.candidateUrls);
+    candidateUrlsRef.current = resolved.candidateUrls;
+    candidateIdxRef.current = 0;
+    isGoogleDriveRef.current = resolved.isGoogleDrive;
+    setCurrentCandidateIndex(0);
+    setDrivePreviewEmbedUrl(resolved.previewEmbedUrl || null);
+    setDriveDirectWebUrl(resolved.directWebUrl || null);
+    setIsUsingEmbedPlayer(false);
+    setAudioError(null);
+    setAudioLoading(true);
 
     if (audioRef.current) {
-      audioRef.current.src = resolved.streamUrl;
+      const initialSrc = resolved.candidateUrls[0] || resolved.streamUrl;
+      audioRef.current.src = initialSrc;
       audioRef.current.playbackRate = playbackRate;
       audioRef.current.volume = isMuted ? 0 : volume;
+      audioRef.current.load();
       audioRef.current
         .play()
-        .then(() => setIsPlaying(true))
+        .then(() => {
+          setIsPlaying(true);
+          setAudioLoading(false);
+        })
         .catch(err => {
-          console.warn('Autoplay error', err);
-          setIsPlaying(false);
+          console.warn('[Audio] Initial play request pending or interaction required:', err);
         });
     }
 
@@ -311,6 +389,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map(s => (s.id === parentSeries.id ? { ...s, totalListens: s.totalListens + 1 } : s))
       );
     }
+  };
+
+  const toggleEmbedPlayer = (useEmbed?: boolean) => {
+    setIsUsingEmbedPlayer(prev => {
+      const nextVal = useEmbed !== undefined ? useEmbed : !prev;
+      if (nextVal && audioRef.current) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      }
+      return nextVal;
+    });
+  };
+
+  const retryPlayback = () => {
+    if (!audioRef.current || !currentPlayingEpisode) return;
+    const resolved = resolveAudioUrl(currentPlayingEpisode.audioUrl);
+    setAudioCandidateUrls(resolved.candidateUrls);
+    candidateUrlsRef.current = resolved.candidateUrls;
+    candidateIdxRef.current = 0;
+    setCurrentCandidateIndex(0);
+    setAudioError(null);
+    setAudioLoading(true);
+    setIsUsingEmbedPlayer(false);
+    audioRef.current.src = resolved.candidateUrls[0];
+    audioRef.current.load();
+    audioRef.current
+      .play()
+      .then(() => {
+        setIsPlaying(true);
+        setAudioLoading(false);
+      })
+      .catch(console.warn);
   };
 
   const togglePlayPause = () => {
@@ -654,6 +764,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         volume,
         isMuted,
         audioSourceInfo,
+        audioCandidateUrls,
+        currentCandidateIndex,
+        isUsingEmbedPlayer,
+        audioError,
+        audioLoading,
+        drivePreviewEmbedUrl,
+        driveDirectWebUrl,
         selectedSeriesForModal,
         currentView,
         searchQuery,
@@ -662,6 +779,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         audioRef,
         isLoggedIn,
         playEpisode,
+        toggleEmbedPlayer,
+        retryPlayback,
         togglePlayPause,
         seekTo,
         skipSeconds,
