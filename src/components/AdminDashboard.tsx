@@ -26,10 +26,12 @@ import {
   Key,
   Clock,
   UserCheck,
+  ShieldCheck,
 } from 'lucide-react';
 import { AudioSeries, AudioEpisode, UserProfile } from '../types';
 import { SUPABASE_SQL_SCHEMA } from '../data/initialData';
 import { extractGoogleDriveId } from '../utils/audioResolver';
+import { decryptPassword, generateSecurePassword } from '../utils/crypto';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -68,6 +70,7 @@ export const AdminDashboard: React.FC = () => {
   const [editingUser, setEditingUser] = useState<Partial<UserProfile> | null>(null);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+  const [decryptedPasswords, setDecryptedPasswords] = useState<Record<string, string>>({});
   const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
 
   // Analytics Metrics
@@ -76,20 +79,43 @@ export const AdminDashboard: React.FC = () => {
   const totalListens = series.reduce((acc, s) => acc + s.totalListens, 0);
   const overallApproval = totalLikes + totalUnlikes > 0 ? Math.round((totalLikes / (totalLikes + totalUnlikes)) * 100) : 100;
 
-  // Toggle password visibility for user row
-  const togglePasswordVisibility = (userId: string) => {
-    setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+  // Toggle password visibility for user row (decrypts with AES-256)
+  const togglePasswordVisibility = async (userId: string, rawPassword: string) => {
+    if (!visiblePasswords[userId]) {
+      let clearPass = rawPassword;
+      if (rawPassword.startsWith('enc:') || rawPassword.startsWith('enc_b64:')) {
+        clearPass = await decryptPassword(rawPassword);
+      }
+      setDecryptedPasswords(prev => ({ ...prev, [userId]: clearPass }));
+      setVisiblePasswords(prev => ({ ...prev, [userId]: true }));
+    } else {
+      setVisiblePasswords(prev => ({ ...prev, [userId]: false }));
+    }
   };
 
-  // Copy password to clipboard
-  const handleCopyPassword = (userId: string, pass: string) => {
-    navigator.clipboard.writeText(pass);
+  // Copy decrypted password to clipboard
+  const handleCopyPassword = async (userId: string, rawPassword: string) => {
+    let clearPass = decryptedPasswords[userId] || rawPassword;
+    if (clearPass.startsWith('enc:') || clearPass.startsWith('enc_b64:')) {
+      clearPass = await decryptPassword(rawPassword);
+    }
+    navigator.clipboard.writeText(clearPass);
     setCopiedPasswordId(userId);
     setTimeout(() => setCopiedPasswordId(null), 2000);
   };
 
+  // Open modal with decrypted password for editing
+  const handleStartEditUser = async (user: UserProfile) => {
+    let clearPass = user.password;
+    if (user.password.startsWith('enc:') || user.password.startsWith('enc_b64:')) {
+      clearPass = await decryptPassword(user.password);
+    }
+    setEditingUser({ ...user, password: clearPass });
+    setUserModalOpen(true);
+  };
+
   // Handle User Save (Create or Edit)
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser?.login || !editingUser?.password) return;
 
@@ -97,7 +123,7 @@ export const AdminDashboard: React.FC = () => {
       // Edit existing user
       const existing = allUsers.find(u => u.id === editingUser.id);
       if (existing) {
-        updateUser({
+        await updateUser({
           ...existing,
           name: editingUser.name || editingUser.login,
           login: editingUser.login.trim(),
@@ -108,7 +134,7 @@ export const AdminDashboard: React.FC = () => {
       }
     } else {
       // Create new user
-      createUser({
+      await createUser({
         name: editingUser.name || editingUser.login,
         login: editingUser.login.trim(),
         password: editingUser.password,
@@ -486,18 +512,18 @@ export const AdminDashboard: React.FC = () => {
                           </span>
                         </td>
 
-                        {/* SENHA COM BOTÃO DE VISUALIZAR E COPIAR */}
+                        {/* SENHA COM BOTÃO DE VISUALIZAR E COPIAR (CRIPTOGRAFADA COM AES-256) */}
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-2">
                             <span className="font-mono bg-black/60 px-2.5 py-1 rounded border border-neutral-800 text-neutral-200 text-xs min-w-[120px] select-all">
-                              {isPasswordVisible ? user.password : '••••••••••••'}
+                              {isPasswordVisible ? (decryptedPasswords[user.id] || user.password) : '••••••••••••'}
                             </span>
 
-                            {/* Botão de Visualizar Senha */}
+                            {/* Botão de Visualizar Senha Descriptografada */}
                             <button
-                              onClick={() => togglePasswordVisibility(user.id)}
-                              className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-                              title={isPasswordVisible ? 'Ocultar senha' : 'Visualizar senha'}
+                              onClick={() => togglePasswordVisibility(user.id, user.password)}
+                              className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                              title={isPasswordVisible ? 'Ocultar senha' : 'Descriptografar e visualizar senha'}
                             >
                               {isPasswordVisible ? <EyeOff className="w-4 h-4 text-amber-400" /> : <Eye className="w-4 h-4" />}
                             </button>
@@ -505,8 +531,8 @@ export const AdminDashboard: React.FC = () => {
                             {/* Botão de Copiar Senha */}
                             <button
                               onClick={() => handleCopyPassword(user.id, user.password)}
-                              className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-                              title="Copiar senha"
+                              className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                              title="Copiar senha descriptografada"
                             >
                               {copiedPasswordId === user.id ? (
                                 <Check className="w-4 h-4 text-emerald-400" />
@@ -530,11 +556,8 @@ export const AdminDashboard: React.FC = () => {
                         <td className="py-3.5 px-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
-                              onClick={() => {
-                                setEditingUser({ ...user });
-                                setUserModalOpen(true);
-                              }}
-                              className="p-1.5 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors"
+                              onClick={() => handleStartEditUser(user)}
+                              className="p-1.5 rounded hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
                               title="Editar usuário e senha"
                             >
                               <Edit3 className="w-4 h-4" />

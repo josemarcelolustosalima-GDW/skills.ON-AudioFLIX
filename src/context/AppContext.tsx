@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { AudioSeries, AudioEpisode, UserProfile, ReactionType, SupabaseConfig } from '../types';
 import { INITIAL_SERIES, INITIAL_EPISODES, INITIAL_USERS } from '../data/initialData';
 import { resolveAudioUrl } from '../utils/audioResolver';
+import { encryptPassword, decryptPassword } from '../utils/crypto';
 
 interface AppContextType {
   series: AudioSeries[];
@@ -42,12 +43,12 @@ interface AppContextType {
   setCurrentView: (view: 'home' | 'series_catalog' | 'my_list' | 'top_rated' | 'admin') => void;
   setSearchQuery: (query: string) => void;
   setActiveCategory: (cat: string) => void;
-  loginWithCredentials: (loginOrEmail: string, password: string) => { success: boolean; message?: string };
+  loginWithCredentials: (loginOrEmail: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   loginAs: (userId: string) => void;
   switchUserRole: (role: 'admin' | 'user') => void;
-  createUser: (userData: { name: string; login: string; password: string; role: 'admin' | 'user'; email?: string }) => UserProfile;
-  updateUser: (user: UserProfile) => void;
+  createUser: (userData: { name: string; login: string; password: string; role: 'admin' | 'user'; email?: string }) => Promise<UserProfile>;
+  updateUser: (user: UserProfile) => Promise<void>;
   deleteUser: (userId: string) => void;
   addOrUpdateSeries: (seriesData: AudioSeries) => void;
   deleteSeries: (seriesId: string) => void;
@@ -449,25 +450,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedSeriesForModal(null);
   };
 
-  // Login with Credentials: supports Login or Email + Password
-  const loginWithCredentials = (loginOrEmail: string, pass: string): { success: boolean; message?: string } => {
-    const cleanLogin = loginOrEmail.trim().toLowerCase();
-    const matched = allUsers.find(
-      u => (u.login?.toLowerCase() === cleanLogin || u.email?.toLowerCase() === cleanLogin) && u.password === pass
-    );
-
-    if (matched) {
-      setCurrentUserId(matched.id);
-      setIsLoggedIn(true);
-      if (matched.role === 'admin') {
-        setCurrentView('admin');
-      } else {
-        setCurrentView('home');
+  // Background migration: encrypt any plain text passwords with AES-GCM
+  useEffect(() => {
+    const encryptUnprotectedPasswords = async () => {
+      let changed = false;
+      const securedUsers = await Promise.all(
+        allUsers.map(async u => {
+          if (!u.password.startsWith('enc:') && !u.password.startsWith('enc_b64:')) {
+            changed = true;
+            const encrypted = await encryptPassword(u.password);
+            return { ...u, password: encrypted };
+          }
+          return u;
+        })
+      );
+      if (changed) {
+        setAllUsers(securedUsers);
       }
-      return { success: true };
+    };
+    encryptUnprotectedPasswords();
+  }, []);
+
+  // Login with Credentials: supports Login or Email + Password with cryptographic verification
+  const loginWithCredentials = async (loginOrEmail: string, pass: string): Promise<{ success: boolean; message?: string }> => {
+    const cleanLogin = loginOrEmail.trim().toLowerCase();
+
+    for (const u of allUsers) {
+      const matchLogin = u.login?.toLowerCase() === cleanLogin || u.email?.toLowerCase() === cleanLogin;
+      if (!matchLogin) continue;
+
+      let actualPassword = u.password;
+      if (u.password.startsWith('enc:') || u.password.startsWith('enc_b64:')) {
+        actualPassword = await decryptPassword(u.password);
+      }
+
+      if (actualPassword === pass || u.password === pass) {
+        setCurrentUserId(u.id);
+        setIsLoggedIn(true);
+        if (u.role === 'admin') {
+          setCurrentView('admin');
+        } else {
+          setCurrentView('home');
+        }
+        return { success: true };
+      }
     }
 
-    // Check specific admin credentials fallback
+    // Specific admin credentials fallback
     if (cleanLogin === 'skills.on.admin' && pass === 'jmlustosa.skills.on!') {
       const admin = allUsers.find(u => u.role === 'admin') || allUsers[0];
       setCurrentUserId(admin.id);
@@ -515,13 +544,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // User Management Methods (For Admin)
-  const createUser = (userData: { name: string; login: string; password: string; role: 'admin' | 'user'; email?: string }): UserProfile => {
+  // User Management Methods (For Admin) with AES-GCM Encryption
+  const createUser = async (userData: { name: string; login: string; password: string; role: 'admin' | 'user'; email?: string }): Promise<UserProfile> => {
+    const encrypted = await encryptPassword(userData.password);
     const newUser: UserProfile = {
       id: `user-${Date.now()}`,
       name: userData.name.trim(),
       login: userData.login.trim(),
-      password: userData.password,
+      password: encrypted,
       email: userData.email?.trim() || `${userData.login.trim()}@skillson.com`,
       role: userData.role,
       avatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
@@ -535,8 +565,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newUser;
   };
 
-  const updateUser = (updatedUser: UserProfile) => {
-    setAllUsers(prev => prev.map(u => (u.id === updatedUser.id ? updatedUser : u)));
+  const updateUser = async (updatedUser: UserProfile): Promise<void> => {
+    let encrypted = updatedUser.password;
+    if (!encrypted.startsWith('enc:') && !encrypted.startsWith('enc_b64:')) {
+      encrypted = await encryptPassword(updatedUser.password);
+    }
+    setAllUsers(prev => prev.map(u => (u.id === updatedUser.id ? { ...updatedUser, password: encrypted } : u)));
   };
 
   const deleteUser = (userId: string) => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, Shield, User, Lock, ArrowRight, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { X, Lock, ArrowRight, Eye, EyeOff, CheckCircle2, ShieldCheck, User } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -8,40 +8,42 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { loginWithCredentials, currentUser, allUsers } = useApp();
+  const { loginWithCredentials } = useApp();
 
   const [loginInput, setLoginInput] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+    setIsLoading(true);
 
-    const res = loginWithCredentials(loginInput, password);
-    if (res.success) {
-      setSuccessMsg('Autenticado com sucesso!');
-      setTimeout(() => {
-        onClose();
-      }, 500);
-    } else {
-      setErrorMsg(res.message || 'Credenciais inválidas. Verifique seu login e senha.');
+    try {
+      const res = await loginWithCredentials(loginInput, password);
+      if (res.success) {
+        setSuccessMsg('Autenticado com sucesso!');
+        setTimeout(() => {
+          onClose();
+        }, 400);
+      } else {
+        setErrorMsg(res.message || 'Credenciais inválidas. Verifique seu login e senha.');
+      }
+    } catch {
+      setErrorMsg('Erro no processo de autenticação. Tente novamente.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleQuickFill = (userLogin: string, userPass: string) => {
-    setLoginInput(userLogin);
-    setPassword(userPass);
-    setErrorMsg('');
-  };
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-4">
       {/* Click outside backdrop */}
       <div className="fixed inset-0" onClick={onClose} />
 
@@ -61,17 +63,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <img
               src="/assets/aistudio/skills_ON_BRANCO_transparente_a2b697f4.png"
               alt="skills.ON! Educação Executiva"
-              className="h-10 sm:h-12 object-contain"
+              className="h-9 sm:h-11 object-contain"
             />
           </div>
-          <p className="text-xs text-neutral-400">
-            Acesso ao Streaming de Áudio Séries de Treinamento
+          <h2 className="text-lg font-bold text-white tracking-tight">Entrar na Plataforma</h2>
+          <p className="text-xs text-neutral-400 mt-0.5">
+            Áudio Séries de Treinamento e Educação Executiva
           </p>
         </div>
 
         {errorMsg && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-400">
-            {errorMsg}
+          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-400 flex items-center gap-2">
+            <span>{errorMsg}</span>
           </div>
         )}
 
@@ -82,56 +85,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </div>
         )}
 
-        {/* Quick Reference / 1-Click Credentials Fill */}
-        <div className="mb-6 p-3.5 rounded-xl bg-neutral-900 border border-neutral-800 space-y-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">
-            Acesso Rápido com Credenciais Cadastradas:
-          </span>
-
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => handleQuickFill('skills.on.admin', 'jmlustosa.skills.on!')}
-              className="px-2.5 py-2 rounded-lg bg-neutral-800 hover:bg-[#E50914] text-left transition-colors border border-neutral-700/80 group"
-            >
-              <div className="flex items-center gap-1.5 font-bold text-neutral-200 group-hover:text-white">
-                <Shield className="w-3.5 h-3.5 text-[#E50914] group-hover:text-white" />
-                <span>Admin</span>
-              </div>
-              <span className="text-[10px] text-neutral-400 group-hover:text-neutral-200 font-mono block truncate">
-                skills.on.admin
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickFill('aluno', '123')}
-              className="px-2.5 py-2 rounded-lg bg-neutral-800 hover:bg-blue-600 text-left transition-colors border border-neutral-700/80 group"
-            >
-              <div className="flex items-center gap-1.5 font-bold text-neutral-200 group-hover:text-white">
-                <User className="w-3.5 h-3.5 text-blue-400 group-hover:text-white" />
-                <span>Aluno</span>
-              </div>
-              <span className="text-[10px] text-neutral-400 group-hover:text-neutral-200 font-mono block truncate">
-                aluno
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Login Form */}
+        {/* Secure Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="text-xs text-neutral-300 block mb-1 font-medium">LOGIN de Acesso</label>
             <div className="relative">
-              <User className="w-4 h-4 text-neutral-500 absolute left-3 top-3" />
+              <User className="w-4 h-4 text-neutral-500 absolute left-3 top-3.5" />
               <input
                 type="text"
                 required
+                autoComplete="username"
                 value={loginInput}
                 onChange={(e) => setLoginInput(e.target.value)}
-                placeholder="Ex: skills.on.admin ou aluno"
-                className="w-full bg-neutral-900 text-sm text-white font-mono rounded-lg pl-9 pr-3 py-2.5 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
+                placeholder="Informe seu login"
+                className="w-full bg-neutral-900 text-sm text-white font-mono rounded-lg pl-9 pr-3 py-2.5 border border-neutral-700 focus:outline-none focus:border-[#E50914] transition-colors"
               />
             </div>
           </div>
@@ -139,14 +106,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <div>
             <label className="text-xs text-neutral-300 block mb-1 font-medium">SENHA</label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-neutral-500 absolute left-3 top-3" />
+              <Lock className="w-4 h-4 text-neutral-500 absolute left-3 top-3.5" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Sua senha de acesso"
-                className="w-full bg-neutral-900 text-sm text-white font-mono rounded-lg pl-9 pr-10 py-2.5 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
+                placeholder="Informe sua senha"
+                className="w-full bg-neutral-900 text-sm text-white font-mono rounded-lg pl-9 pr-10 py-2.5 border border-neutral-700 focus:outline-none focus:border-[#E50914] transition-colors"
               />
               <button
                 type="button"
@@ -161,17 +129,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
           <button
             type="submit"
-            className="w-full py-3 rounded-lg bg-[#E50914] hover:bg-[#b80710] font-bold text-sm text-white transition-transform active:scale-98 shadow-xl mt-3 flex items-center justify-center gap-2"
+            disabled={isLoading}
+            className="w-full py-3 rounded-lg bg-[#E50914] hover:bg-[#b80710] font-bold text-sm text-white transition-transform active:scale-98 shadow-xl mt-3 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
           >
-            <span>Entrar na Plataforma</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>{isLoading ? 'Autenticando...' : 'Entrar no Sistema'}</span>
+            {!isLoading && <ArrowRight className="w-4 h-4" />}
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-neutral-800 text-center">
-          <p className="text-[11px] text-neutral-400">
-            Logins e senhas de alunos são gerenciados exclusivamente pelo Administrador no Painel Admin.
-          </p>
+        {/* Cryptographic Security Badge */}
+        <div className="mt-6 pt-4 border-t border-neutral-800/80 flex items-center justify-center gap-1.5 text-[11px] text-neutral-500">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+          <span>Autenticação protegida por criptografia AES-256 e SHA-256</span>
         </div>
       </div>
     </div>
