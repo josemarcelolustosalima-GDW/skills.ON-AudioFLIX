@@ -40,7 +40,7 @@ import {
   FileCode,
 } from 'lucide-react';
 import { AudioSeries, AudioEpisode, UserProfile } from '../types';
-import { SUPABASE_SQL_SCHEMA } from '../data/initialData';
+import { SUPABASE_SQL_SCHEMA, SUPABASE_RLS_FIX_SQL } from '../data/initialData';
 import { extractGoogleDriveId, analyzeAudioUrl } from '../utils/audioResolver';
 import { decryptPassword, generateSecurePassword } from '../utils/crypto';
 import { generateInitialDataTsCode, downloadCatalogFile } from '../utils/syncManager';
@@ -75,6 +75,7 @@ export const AdminDashboard: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'supabase'>('analytics');
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedRlsFix, setCopiedRlsFix] = useState(false);
   const [syncUrl, setSyncUrl] = useState<string>('');
   const [copiedSyncUrl, setCopiedSyncUrl] = useState(false);
   const [copiedSeedCode, setCopiedSeedCode] = useState(false);
@@ -249,6 +250,12 @@ export const AdminDashboard: React.FC = () => {
     navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 2000);
+  };
+
+  const handleCopyRlsFix = () => {
+    navigator.clipboard.writeText(SUPABASE_RLS_FIX_SQL);
+    setCopiedRlsFix(true);
+    setTimeout(() => setCopiedRlsFix(false), 2000);
   };
 
   const filteredEpisodes = selectedSeriesFilter === 'all'
@@ -929,9 +936,9 @@ export const AdminDashboard: React.FC = () => {
             </select>
           </div>
 
-          {/* Episodes List Table */}
+          {/* Episodes List Table with Visible Scrollbar */}
           <div className="bg-neutral-900/80 border border-neutral-800 rounded-xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[620px] overflow-y-auto visible-scrollbar">
               <table className="w-full text-left text-xs md:text-sm">
                 <thead className="bg-neutral-800/80 text-neutral-400 uppercase text-[11px] font-semibold border-b border-neutral-700">
                   <tr>
@@ -1404,11 +1411,39 @@ export const AdminDashboard: React.FC = () => {
               </div>
             )}
 
+            {/* Quick RLS 42501 Fix Card */}
+            <div className="p-3.5 rounded-lg bg-amber-950/40 border border-amber-500/40 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-xs font-bold text-amber-200">
+                    Apareceu o erro de Row-Level Security (RLS 42501) ao enviar?
+                  </span>
+                </div>
+                <button
+                  onClick={handleCopyRlsFix}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-colors cursor-pointer shrink-0"
+                >
+                  {copiedRlsFix ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedRlsFix ? 'Comando Copiado!' : 'Copiar Correção RLS (1 Clique)'}</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                O PostgreSQL do Supabase por padrão bloqueia gravações feitas pela chave pública anônima. Basta colar este comando rápido na aba aberta do <strong>SQL Editor</strong> do Supabase e clicar em <strong>Run</strong>:
+              </p>
+              <pre className="p-2.5 bg-black/60 rounded border border-amber-500/30 text-[10px] font-mono text-amber-300 select-all overflow-x-auto">
+{`alter table public.series disable row level security;
+alter table public.episodes disable row level security;
+alter table public.user_reactions disable row level security;
+alter table public.episodes add column if not exists is_synopsis boolean default false;`}
+              </pre>
+            </div>
+
             {/* SQL Script for Supabase */}
             <div className="pt-2 space-y-2 border-t border-neutral-800">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-xs font-bold text-white">Script SQL do Supabase (Criação das Tabelas)</h4>
+                  <h4 className="text-xs font-bold text-white">Script SQL Completo do Supabase (Criação das Tabelas)</h4>
                   <p className="text-[11px] text-neutral-400">Copie e execute no SQL Editor do Supabase se estiver criando um novo banco:</p>
                 </div>
                 <button

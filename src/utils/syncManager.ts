@@ -6,18 +6,29 @@ export interface CatalogPayload {
   series: AudioSeries[];
   episodes: AudioEpisode[];
   users?: UserProfile[];
+  supabaseConfig?: {
+    supabaseUrl: string;
+    supabaseAnonKey: string;
+    useLiveSupabase: boolean;
+  };
 }
 
 /**
  * Encodes the catalog into a compressed Base64 string for URL hash transfer.
  */
-export function encodeCatalogForUrl(series: AudioSeries[], episodes: AudioEpisode[], users?: UserProfile[]): string {
+export function encodeCatalogForUrl(
+  series: AudioSeries[],
+  episodes: AudioEpisode[],
+  users?: UserProfile[],
+  supabaseConfig?: { supabaseUrl: string; supabaseAnonKey: string; useLiveSupabase: boolean }
+): string {
   const payload: CatalogPayload = {
     version: '2.0',
     exportedAt: new Date().toISOString(),
     series,
     episodes,
     users,
+    supabaseConfig,
   };
   const json = JSON.stringify(payload);
   // Encode utf-8 safely in base64
@@ -156,6 +167,9 @@ export async function pushCatalogToSupabase(
 
     if (!resSeries.ok) {
       const err = await resSeries.text();
+      if (err.includes('42501') || err.includes('row-level security')) {
+        throw new Error('Bloqueio de Permissão (RLS 42501) no Supabase: O banco bloqueou a gravação de séries. Execute o script de "Correção RLS" no SQL Editor do Supabase (disponível no Painel Admin) e tente novamente.');
+      }
       throw new Error(`Falha ao sincronizar séries: ${err}`);
     }
 
@@ -187,6 +201,12 @@ export async function pushCatalogToSupabase(
 
     if (!resEpisodes.ok) {
       const err = await resEpisodes.text();
+      if (err.includes('42501') || err.includes('row-level security')) {
+        throw new Error('Bloqueio de Permissão (RLS 42501) no Supabase: O banco bloqueou a gravação de episódios. Execute o script de "Correção RLS" no SQL Editor do Supabase e tente novamente.');
+      }
+      if (err.includes('is_synopsis') || err.includes('column') || err.includes('does not exist')) {
+        throw new Error('Coluna ausente no Supabase: A tabela episodes precisa da coluna "is_synopsis". Execute o script SQL atualizado no SQL Editor do Supabase.');
+      }
       throw new Error(`Falha ao sincronizar episódios: ${err}`);
     }
 
@@ -277,5 +297,140 @@ export async function pullCatalogFromSupabase(
     };
   } catch (err: any) {
     return { ok: false, message: err?.message || 'Erro ao baixar dados do Supabase' };
+  }
+}
+
+/**
+ * Upsert a single episode to Supabase in real time
+ */
+export async function pushSingleEpisodeToSupabase(
+  supabaseUrl: string,
+  supabaseKey: string,
+  e: AudioEpisode
+): Promise<boolean> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const row = {
+      id: e.id,
+      series_id: e.seriesId,
+      episode_number: e.episodeNumber,
+      season: e.season || 1,
+      title: e.title,
+      synopsis: e.synopsis || '',
+      duration_minutes: e.durationMinutes || 20,
+      duration_formatted: e.durationFormatted || '20 min',
+      audio_url: e.audioUrl,
+      image_url: e.imageUrl || '',
+      is_synopsis: Boolean(e.isSynopsis || e.episodeNumber === 0),
+    };
+    const res = await fetch(`${cleanUrl}/rest/v1/episodes`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(row),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Real-time episode push error:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete a single episode from Supabase in real time
+ */
+export async function deleteEpisodeFromSupabase(
+  supabaseUrl: string,
+  supabaseKey: string,
+  episodeId: string
+): Promise<boolean> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const res = await fetch(`${cleanUrl}/rest/v1/episodes?id=eq.${encodeURIComponent(episodeId.trim())}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Real-time episode delete error:', err);
+    return false;
+  }
+}
+
+/**
+ * Upsert a single series to Supabase in real time
+ */
+export async function pushSingleSeriesToSupabase(
+  supabaseUrl: string,
+  supabaseKey: string,
+  s: AudioSeries
+): Promise<boolean> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const row = {
+      id: s.id,
+      title: s.title,
+      subtitle: s.subtitle || '',
+      synopsis: s.synopsis,
+      category: s.category,
+      hero_image: s.heroImage,
+      poster_image: s.posterImage,
+      match_score: s.matchScore,
+      release_year: s.releaseYear,
+      rating_badge: s.ratingBadge,
+      audio_quality: s.audioQuality,
+      mentor: s.mentor,
+      mentor_role: s.mentorRole,
+      tags: s.tags,
+      featured: Boolean(s.featured),
+      likes: s.likes || 0,
+      unlikes: s.unlikes || 0,
+      total_listens: s.totalListens || 0,
+    };
+    const res = await fetch(`${cleanUrl}/rest/v1/series`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(row),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Real-time series push error:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete a single series from Supabase in real time
+ */
+export async function deleteSeriesFromSupabase(
+  supabaseUrl: string,
+  supabaseKey: string,
+  seriesId: string
+): Promise<boolean> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const res = await fetch(`${cleanUrl}/rest/v1/series?id=eq.${encodeURIComponent(seriesId.trim())}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Real-time series delete error:', err);
+    return false;
   }
 }

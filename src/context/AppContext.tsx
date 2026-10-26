@@ -10,6 +10,10 @@ import {
   testSupabaseConnection,
   pushCatalogToSupabase,
   pullCatalogFromSupabase,
+  pushSingleEpisodeToSupabase,
+  deleteEpisodeFromSupabase,
+  pushSingleSeriesToSupabase,
+  deleteSeriesFromSupabase,
 } from '../utils/syncManager';
 
 interface AppContextType {
@@ -294,20 +298,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [supabaseConfig]);
 
-  // 1. Startup Effect: Check URL for sync data (?sync=... or #sync=...)
+  // 1. Startup Effect: Check URL for sync data (?sync=... or #sync=...) or reset parameter (?limpar=true)
   useEffect(() => {
     try {
       const hash = window.location.hash;
       const search = window.location.search;
+      const params = new URLSearchParams(search);
+
+      // Support instant cache clear via URL: ?limpar=true or ?reset=true or #limpar
+      if (params.get('limpar') || params.get('reset') || hash === '#limpar' || hash === '#reset') {
+        localStorage.removeItem(STORAGE_KEY_SERIES);
+        localStorage.removeItem(STORAGE_KEY_EPISODES);
+        localStorage.removeItem(STORAGE_KEY_USERS);
+        localStorage.removeItem(STORAGE_KEY_CURRENT_USER_ID);
+        localStorage.removeItem(STORAGE_KEY_LOGGED_IN);
+        localStorage.removeItem(STORAGE_KEY_SUPABASE);
+        window.history.replaceState(null, '', window.location.pathname);
+        window.location.reload();
+        return;
+      }
+
       let syncPayload: string | null = null;
 
       if (hash.startsWith('#sync=')) {
         syncPayload = hash.substring(6);
-      } else {
-        const params = new URLSearchParams(search);
-        if (params.get('sync')) {
-          syncPayload = params.get('sync');
-        }
+      } else if (params.get('sync')) {
+        syncPayload = params.get('sync');
       }
 
       if (syncPayload) {
@@ -318,6 +334,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (Array.isArray(decoded.users) && decoded.users.length > 0) {
             setAllUsers(decoded.users);
             localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(decoded.users));
+          }
+          if ((decoded as any).supabaseConfig) {
+            setSupabaseConfig((decoded as any).supabaseConfig);
+            localStorage.setItem(STORAGE_KEY_SUPABASE, JSON.stringify((decoded as any).supabaseConfig));
           }
           localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(decoded.series));
           localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(decoded.episodes));
@@ -356,16 +376,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, []);
 
-  // 3. Startup Effect: Pull from Supabase if configured and active
+  // 3. Startup Effect: Pull from Supabase if configured and active (NON-DESTRUCTIVE MERGE)
   useEffect(() => {
     if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
       pullCatalogFromSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey)
         .then(res => {
           if (res.ok && res.series && res.episodes) {
-            setSeries(res.series);
-            setEpisodes(res.episodes);
-            localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(res.series));
-            localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(res.episodes));
+            // 1. Safe non-destructive merge for series
+            setSeries(currentSeries => {
+              const seriesMap = new Map<string, AudioSeries>();
+              // Keep all local series first
+              currentSeries.forEach(s => seriesMap.set(s.id, s));
+              // Merge or update from Supabase
+              res.series!.forEach(s => seriesMap.set(s.id, s));
+              const merged = Array.from(seriesMap.values());
+              try {
+                localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+
+            // 2. Safe non-destructive merge for episodes (NEVER deletes newly added local episodes!)
+            setEpisodes(currentEpisodes => {
+              const epMap = new Map<string, AudioEpisode>();
+              // Keep all current local episodes first
+              currentEpisodes.forEach(e => epMap.set(e.id, e));
+              // Merge or update from Supabase
+              res.episodes!.forEach(e => epMap.set(e.id, e));
+              const merged = Array.from(epMap.values());
+              try {
+                localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(merged));
+              } catch (e) {}
+
+              // Auto-push any local episodes that aren't yet in Supabase
+              const supabaseEpIds = new Set(res.episodes!.map(e => e.id));
+              const localOnlyEps = currentEpisodes.filter(e => !supabaseEpIds.has(e.id));
+              if (localOnlyEps.length > 0) {
+                localOnlyEps.forEach(le => {
+                  pushSingleEpisodeToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, le);
+                });
+              }
+
+              return merged;
+            });
+
             setSupabaseConfig(prev => ({ ...prev, status: 'connected', errorMessage: undefined }));
           }
         })
@@ -868,6 +922,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return updated;
     });
+
+    // Real-time Supabase live sync
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      pushSingleSeriesToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, seriesData);
+    }
   };
 
   const setFeaturedSeries = (seriesId: string) => {
@@ -896,6 +955,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentPlayingSeries(null);
       setIsPlaying(false);
     }
+
+    // Real-time Supabase live sync
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      deleteSeriesFromSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, seriesId);
+    }
   };
 
   const addOrUpdateEpisode = (episodeData: AudioEpisode) => {
@@ -919,6 +983,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return updated;
     });
+
+    // Real-time Supabase live sync (guarantees episode is never lost on refresh or device exit!)
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      pushSingleEpisodeToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, cleanEpisode);
+    }
   };
 
   const deleteEpisode = (episodeId: string) => {
@@ -934,6 +1003,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentPlayingEpisode?.id.trim() === episodeId.trim()) {
       setCurrentPlayingEpisode(null);
       setIsPlaying(false);
+    }
+
+    // Real-time Supabase live sync
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      deleteEpisodeFromSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, episodeId);
     }
   };
 
@@ -976,7 +1050,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const generateSyncUrl = (): string => {
-    const encoded = encodeCatalogForUrl(series, episodes, allUsers);
+    const encoded = encodeCatalogForUrl(
+      series,
+      episodes,
+      allUsers,
+      supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey ? {
+        supabaseUrl: supabaseConfig.supabaseUrl,
+        supabaseAnonKey: supabaseConfig.supabaseAnonKey,
+        useLiveSupabase: supabaseConfig.useLiveSupabase,
+      } : undefined
+    );
     const origin = window.location.origin + window.location.pathname;
     return `${origin}#sync=${encoded}`;
   };

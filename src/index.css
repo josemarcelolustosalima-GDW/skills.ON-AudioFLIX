@@ -46,6 +46,35 @@
   scrollbar-width: none;
 }
 
+/* Highly visible high-contrast scrollbar for episodes list and modals */
+.visible-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  display: block;
+}
+
+.visible-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  margin: 4px 0;
+}
+
+.visible-scrollbar::-webkit-scrollbar-thumb {
+  background: #E50914;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.visible-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #ff1f2d;
+}
+
+.visible-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #E50914 rgba(255, 255, 255, 0.08);
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Brand display font for skills.ON! */
 .font-brand {
   font-family: 'Bebas Neue', sans-serif;

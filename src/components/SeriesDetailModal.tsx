@@ -93,12 +93,12 @@ export const SeriesDetailModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm flex justify-center p-0 md:py-8 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto visible-scrollbar bg-black/85 backdrop-blur-sm flex justify-center items-start p-0 sm:p-4 md:py-8 animate-in fade-in duration-200">
       {/* Click outside backdrop */}
       <div className="fixed inset-0" onClick={closeSeriesModal} />
 
       {/* Modal Dialog Card */}
-      <div className="relative w-full max-w-4xl bg-[#181818] rounded-none md:rounded-xl overflow-hidden shadow-2xl z-10 my-auto md:my-4 border border-neutral-800 text-white">
+      <div className="relative w-full max-w-4xl bg-[#181818] rounded-none sm:rounded-xl overflow-hidden shadow-2xl z-10 my-0 sm:my-4 md:my-6 border border-neutral-800 text-white flex flex-col mb-16">
         {/* Close Button */}
         <button
           onClick={closeSeriesModal}
@@ -323,134 +323,161 @@ export const SeriesDetailModal: React.FC = () => {
             )}
           </div>
 
-          {/* TAB 1: EPISODES LIST (Netflix Layout Standard) */}
+          {/* TAB 1: EPISODES LIST (Netflix Layout Standard with Prominent Visible Scrollbar) */}
           {activeTab === 'episodes' && (
-            <div className="space-y-4">
-              {seriesEpisodes.length === 0 ? (
-                <div className="text-center py-12 text-neutral-400">
-                  <p>Nenhum episódio cadastrado nesta série ainda.</p>
+            <div className="space-y-3">
+              {/* Episodes Header & Scroll indicator */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-neutral-900/90 px-3.5 py-2.5 rounded-lg border border-neutral-800">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white text-xs sm:text-sm">
+                    {seriesEpisodes.length} {seriesEpisodes.length === 1 ? 'Áudio Cadastrado' : 'Áudios Cadastrados'}
+                  </span>
+                  <span className="text-[11px] text-neutral-400">
+                    ({trainingEpisodes.length} {trainingEpisodes.length === 1 ? 'episódio de treinamento' : 'episódios de treinamento'} {synopsisEpisode ? '+ 1 sinopse' : ''})
+                  </span>
                 </div>
-              ) : (
-                seriesEpisodes.map((episode) => {
-                  const isCurrent = currentPlayingEpisode?.id === episode.id;
-                  const isEpSynopsis = Boolean(episode.isSynopsis || Number(episode.episodeNumber) === 0);
-                  const progress = currentUser.listenProgress[episode.id];
-                  const progressPct = progress
-                    ? Math.min(100, (progress.currentTime / progress.duration) * 100)
-                    : 0;
+                {seriesEpisodes.length > 2 && (
+                  <span className="text-amber-300 font-semibold flex items-center gap-1.5 text-[11px] bg-amber-500/15 px-2.5 py-1 rounded border border-amber-500/30 shrink-0">
+                    <span className="animate-pulse">↕</span>
+                    <span>Role a barra lateral vermelha para ver todos</span>
+                  </span>
+                )}
+              </div>
 
-                  return (
-                    <div
-                      key={episode.id}
-                      onClick={() => handlePlayEpisode(episode)}
-                      className={`group flex flex-col md:flex-row items-start md:items-center justify-between p-3 sm:p-4 rounded-lg transition-all cursor-pointer border ${
-                        isCurrent
-                          ? 'bg-neutral-800/90 border-[#E50914]/80 shadow-md'
-                          : isEpSynopsis
-                          ? 'bg-amber-950/20 hover:bg-amber-950/30 border-amber-500/30 hover:border-amber-500/50'
-                          : 'bg-neutral-900/50 hover:bg-neutral-800/70 border-neutral-800/80 hover:border-neutral-700'
-                      }`}
-                    >
-                      {/* Left: Number + Thumbnail + Info */}
-                      <div className="flex items-start md:items-center gap-2.5 sm:gap-4 w-full md:w-3/4">
-                        {/* Episode Number or INTRO Badge */}
-                        {isEpSynopsis ? (
-                          <div className="flex flex-col items-center justify-center shrink-0 w-8 sm:w-10 pt-1 md:pt-0">
-                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 tracking-wider">
-                              INTRO
+              {/* Scrollable Episodes List Container with explicit Visible Scrollbar */}
+              <div className="space-y-3 max-h-[480px] md:max-h-[600px] overflow-y-auto pr-2 visible-scrollbar">
+                {seriesEpisodes.length === 0 ? (
+                  <div className="text-center py-12 text-neutral-400">
+                    <p>Nenhum episódio cadastrado nesta série ainda.</p>
+                  </div>
+                ) : (
+                  seriesEpisodes.map((episode) => {
+                    const isCurrent = currentPlayingEpisode?.id === episode.id;
+                    const isEpSynopsis = Boolean(episode.isSynopsis || Number(episode.episodeNumber) === 0);
+                    const progress = currentUser.listenProgress[episode.id];
+                    const progressPct = progress
+                      ? Math.min(100, (progress.currentTime / progress.duration) * 100)
+                      : 0;
+
+                    return (
+                      <div
+                        key={episode.id}
+                        onClick={() => handlePlayEpisode(episode)}
+                        className={`group flex flex-col md:flex-row items-start md:items-center justify-between p-3 sm:p-4 rounded-lg transition-all cursor-pointer border ${
+                          isCurrent
+                            ? 'bg-neutral-800/90 border-[#E50914]/80 shadow-md'
+                            : isEpSynopsis
+                            ? 'bg-amber-950/20 hover:bg-amber-950/30 border-amber-500/30 hover:border-amber-500/50'
+                            : 'bg-neutral-900/50 hover:bg-neutral-800/70 border-neutral-800/80 hover:border-neutral-700'
+                        }`}
+                      >
+                        {/* Left: Number + Thumbnail + Info */}
+                        <div className="flex items-start md:items-center gap-2.5 sm:gap-4 w-full md:w-3/4">
+                          {/* Episode Number or INTRO Badge */}
+                          {isEpSynopsis ? (
+                            <div className="flex flex-col items-center justify-center shrink-0 w-8 sm:w-10 pt-1 md:pt-0">
+                              <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 tracking-wider">
+                                INTRO
+                              </span>
+                              <span className="text-[8px] text-amber-400/80 font-mono font-bold mt-0.5">EP. 0</span>
+                            </div>
+                          ) : (
+                            <span className="text-base sm:text-xl md:text-2xl font-bold text-neutral-500 group-hover:text-white transition-colors w-6 sm:w-8 text-center shrink-0 pt-1 md:pt-0">
+                              {episode.episodeNumber.toString().padStart(2, '0')}
                             </span>
-                            <span className="text-[8px] text-amber-400/80 font-mono font-bold mt-0.5">EP. 0</span>
-                          </div>
-                        ) : (
-                          <span className="text-base sm:text-xl md:text-2xl font-bold text-neutral-500 group-hover:text-white transition-colors w-6 sm:w-8 text-center shrink-0 pt-1 md:pt-0">
-                            {episode.episodeNumber.toString().padStart(2, '0')}
-                          </span>
-                        )}
-
-                        {/* Thumbnail with Play Hover */}
-                        <div className="relative aspect-video w-24 sm:w-32 md:w-40 rounded overflow-hidden bg-neutral-800 shrink-0 border border-neutral-700/50">
-                          <img
-                            src={episode.imageUrl || series.posterImage}
-                            alt={episode.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-
-                          {/* Play overlay button */}
-                          <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
-                            isCurrent && isPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                          }`}>
-                            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white text-black flex items-center justify-center shadow-lg">
-                              <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-black translate-x-0.5" />
-                            </div>
-                          </div>
-
-                          {/* Listen progress bar in thumbnail bottom */}
-                          {progressPct > 0 && (
-                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700">
-                              <div
-                                className="h-full bg-[#E50914]"
-                                style={{ width: `${progressPct}%` }}
-                              />
-                            </div>
                           )}
-                        </div>
 
-                        {/* Episode Titles & Synopsis */}
-                        <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                            {isEpSynopsis ? (
-                              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 flex items-center gap-1 shrink-0">
-                                <Radio className="w-2.5 h-2.5 text-amber-400" />
-                                <span>Áudio de Sinopse (Abertura)</span>
-                              </span>
-                            ) : (
-                              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-300 bg-neutral-800 px-1.5 py-0.5 rounded border border-neutral-700 shrink-0">
-                                Episódio {episode.episodeNumber}
-                              </span>
-                            )}
-                            <h4 className={`text-xs sm:text-sm md:text-base font-bold transition-colors line-clamp-1 ${
-                              isCurrent ? 'text-[#E50914]' : isEpSynopsis ? 'text-amber-100' : 'text-white group-hover:text-neutral-100'
+                          {/* Thumbnail with Play Hover */}
+                          <div className="relative aspect-video w-24 sm:w-32 md:w-40 rounded overflow-hidden bg-neutral-800 shrink-0 border border-neutral-700/50">
+                            <img
+                              src={episode.imageUrl || series.posterImage}
+                              alt={episode.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+
+                            {/* Play overlay button */}
+                            <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
+                              isCurrent && isPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                             }`}>
-                              {episode.title}
-                            </h4>
-                            {isCurrent && isPlaying && (
-                              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#E50914] bg-[#E50914]/20 px-1.5 py-0.5 rounded border border-[#E50914]/40 flex items-center gap-1 shrink-0">
-                                <Radio className="w-2.5 h-2.5 animate-pulse" />
-                                <span>No ar</span>
-                              </span>
+                              <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white text-black flex items-center justify-center shadow-lg">
+                                <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-black translate-x-0.5" />
+                              </div>
+                            </div>
+
+                            {/* Listen progress bar in thumbnail bottom */}
+                            {progressPct > 0 && (
+                              <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700">
+                                <div
+                                  className="h-full bg-[#E50914]"
+                                  style={{ width: `${progressPct}%` }}
+                                />
+                              </div>
                             )}
                           </div>
-                          <p className="text-[11px] sm:text-xs md:text-sm text-neutral-400 line-clamp-2 leading-relaxed">
-                            {episode.synopsis}
-                          </p>
+
+                          {/* Episode Titles & Synopsis */}
+                          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                              {isEpSynopsis ? (
+                                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 flex items-center gap-1 shrink-0">
+                                  <Radio className="w-2.5 h-2.5 text-amber-400" />
+                                  <span>Áudio de Sinopse (Abertura)</span>
+                                </span>
+                              ) : (
+                                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-300 bg-neutral-800 px-1.5 py-0.5 rounded border border-neutral-700 shrink-0">
+                                  Episódio {episode.episodeNumber}
+                                </span>
+                              )}
+                              <h4 className={`text-xs sm:text-sm md:text-base font-bold transition-colors line-clamp-1 ${
+                                isCurrent ? 'text-[#E50914]' : isEpSynopsis ? 'text-amber-100' : 'text-white group-hover:text-neutral-100'
+                              }`}>
+                                {episode.title}
+                              </h4>
+                              {isCurrent && isPlaying && (
+                                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#E50914] bg-[#E50914]/20 px-1.5 py-0.5 rounded border border-[#E50914]/40 flex items-center gap-1 shrink-0">
+                                  <Radio className="w-2.5 h-2.5 animate-pulse" />
+                                  <span>No ar</span>
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] sm:text-xs md:text-sm text-neutral-400 line-clamp-2 leading-relaxed">
+                              {episode.synopsis}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Right: Duration & Listen Button */}
+                        <div className="mt-2.5 md:mt-0 flex items-center justify-between md:justify-end gap-3 sm:gap-4 w-full md:w-auto shrink-0 pl-8 sm:pl-12 md:pl-0">
+                          <div className="flex items-center gap-1 text-[11px] sm:text-xs md:text-sm font-semibold text-neutral-400">
+                            <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            <span>{episode.durationFormatted || `${episode.durationMinutes} min`}</span>
+                          </div>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePlayEpisode(episode);
+                            }}
+                            className={`px-3 py-1.5 rounded text-xs font-bold text-white transition-colors border cursor-pointer active:scale-95 ${
+                              isEpSynopsis
+                                ? 'bg-amber-600 hover:bg-amber-500 border-amber-500/50'
+                                : 'bg-neutral-800 hover:bg-[#E50914] border-neutral-700'
+                            }`}
+                          >
+                            {isCurrent && isPlaying ? 'Pausar' : isEpSynopsis ? 'Ouvir Sinopse' : 'Ouvir'}
+                          </button>
                         </div>
                       </div>
+                    );
+                  })
+                )}
 
-                      {/* Right: Duration & Listen Button */}
-                      <div className="mt-2.5 md:mt-0 flex items-center justify-between md:justify-end gap-3 sm:gap-4 w-full md:w-auto shrink-0 pl-8 sm:pl-12 md:pl-0">
-                        <div className="flex items-center gap-1 text-[11px] sm:text-xs md:text-sm font-semibold text-neutral-400">
-                          <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                          <span>{episode.durationFormatted || `${episode.durationMinutes} min`}</span>
-                        </div>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePlayEpisode(episode);
-                          }}
-                          className={`px-3 py-1.5 rounded text-xs font-bold text-white transition-colors border cursor-pointer active:scale-95 ${
-                            isEpSynopsis
-                              ? 'bg-amber-600 hover:bg-amber-500 border-amber-500/50'
-                              : 'bg-neutral-800 hover:bg-[#E50914] border-neutral-700'
-                          }`}
-                        >
-                          {isCurrent && isPlaying ? 'Pausar' : isEpSynopsis ? 'Ouvir Sinopse' : 'Ouvir'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                {seriesEpisodes.length > 3 && (
+                  <div className="pt-3 pb-2 text-center text-[11px] text-neutral-500 border-t border-neutral-800/80">
+                    Fim da lista • Todos os {seriesEpisodes.length} episódios carregados
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
