@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Play, Info, Volume2, VolumeX, Plus, Check, Clock } from 'lucide-react';
+import { Info, Volume2, VolumeX, Plus, Check, Clock } from 'lucide-react';
 import { AudioSeries } from '../types';
 
 interface HeroBillboardProps {
@@ -10,7 +10,6 @@ interface HeroBillboardProps {
 export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
   const {
     episodes,
-    playEpisode,
     openSeriesModal,
     isMuted,
     toggleMute,
@@ -18,20 +17,14 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
     toggleMyList,
   } = useApp();
 
-  const seriesEpisodes = episodes.filter(e => e.seriesId === series.id);
+  const seriesEpisodes = episodes
+    .filter(e => e.seriesId.trim().toLowerCase() === series.id.trim().toLowerCase())
+    .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
   const firstEpisode = seriesEpisodes[0];
   const isInMyList = currentUser.myList.includes(series.id);
 
-  const handlePlayFirst = () => {
-    if (firstEpisode) {
-      playEpisode(firstEpisode, series);
-    } else {
-      openSeriesModal(series);
-    }
-  };
-
   return (
-    <div className="relative w-full h-[85vh] min-h-[620px] max-h-[880px] overflow-hidden select-none">
+    <div className="relative w-full h-[75vh] min-h-[500px] md:h-[85vh] md:min-h-[620px] max-h-[880px] overflow-hidden select-none">
       {/* Background Hero Banner */}
       <div className="absolute inset-0">
         <img
@@ -51,65 +44,58 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
       </div>
 
       {/* Hero Content Container with Generous Top Clearance */}
-      <div className="relative z-20 h-full flex flex-col justify-end pt-28 md:pt-36 pb-20 md:pb-28 px-4 md:px-12 max-w-3xl">
+      <div className="relative z-20 h-full flex flex-col justify-end pt-20 sm:pt-28 md:pt-36 pb-16 sm:pb-20 md:pb-28 px-4 md:px-12 max-w-3xl">
         {/* Category & Badge */}
-        <div className="flex items-center gap-2 mb-2 text-xs font-semibold tracking-wider text-neutral-300">
+        <div className="flex items-center gap-2 mb-1.5 sm:mb-2 text-[11px] sm:text-xs font-semibold tracking-wider text-neutral-300">
           <span className="text-[#E50914] font-bold tracking-widest uppercase">ÁUDIO SÉRIE ORIGINAL</span>
           <span className="text-neutral-500">•</span>
-          <span className="text-white/90">{series.category}</span>
+          <span className="text-white/90 truncate">{series.category}</span>
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-3 text-balance drop-shadow-md">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.15] mb-2 sm:mb-3 drop-shadow-md">
           {series.title}
         </h1>
 
         {/* Metadata info strip */}
-        <div className="flex flex-wrap items-center gap-3 text-xs md:text-sm font-medium mb-4 text-neutral-300">
-          <span className="text-emerald-400 font-bold">{series.matchScore}% de Relevância</span>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs md:text-sm font-medium mb-3 sm:mb-4 text-neutral-300">
+          <span className="text-emerald-400 font-bold">{series.matchScore}% relevante</span>
           <span className="text-neutral-400">{series.releaseYear}</span>
-          <span className="px-1.5 py-0.5 border border-neutral-600 rounded text-[11px] text-neutral-300 font-semibold">
+          <span className="px-1.5 py-0.5 border border-neutral-600 rounded text-[10px] sm:text-[11px] text-neutral-300 font-semibold">
             {series.ratingBadge}
           </span>
-          <span className="text-neutral-400">{seriesEpisodes.length} Episódios</span>
+          <span className="text-neutral-400 hidden xs:inline">{seriesEpisodes.length} Episódios</span>
           <span className="flex items-center gap-1 text-amber-300 font-medium">
             <Clock className="w-3.5 h-3.5" />
             <span>{series.episodeDurationEstimate || (firstEpisode ? firstEpisode.durationFormatted : '20 min')}</span>
           </span>
-          <span className="px-1.5 py-0.5 bg-neutral-800/80 border border-neutral-700 rounded text-[11px] text-neutral-300 font-medium">
+          <span className="px-1.5 py-0.5 bg-neutral-800/80 border border-neutral-700 rounded text-[10px] sm:text-[11px] text-neutral-300 font-medium hidden sm:inline-block">
             {series.audioQuality}
           </span>
         </div>
 
         {/* Synopsis */}
-        <p className="text-sm md:text-base text-neutral-200 leading-relaxed mb-6 line-clamp-3 md:line-clamp-4 drop-shadow">
+        <p className="text-xs sm:text-sm md:text-base text-neutral-200 leading-relaxed mb-4 sm:mb-6 line-clamp-2 sm:line-clamp-3 md:line-clamp-4 drop-shadow">
           {series.synopsis}
         </p>
 
-        {/* CTAs */}
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={handlePlayFirst}
-            className="flex items-center gap-2 px-6 py-2.5 rounded bg-white hover:bg-neutral-200 text-black font-bold text-sm md:text-base transition-all active:scale-95 shadow-xl"
-          >
-            <Play className="w-5 h-5 fill-black" />
-            <span>Ouvir Episódio 1</span>
-          </button>
-
+        {/* CTAs: Only 'Mais Informações' as requested for proper screen sequencing */}
+        <div className="flex items-center gap-3">
           <button
             onClick={() => openSeriesModal(series)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded bg-neutral-600/70 hover:bg-neutral-600/90 text-white font-semibold text-sm md:text-base backdrop-blur-sm transition-all active:scale-95 border border-white/10"
+            className="flex items-center gap-2 px-5 sm:px-7 py-2.5 sm:py-3 rounded-md bg-white hover:bg-neutral-200 text-black font-bold text-xs sm:text-base transition-all active:scale-95 shadow-xl cursor-pointer"
+            title="Ver detalhes completos e episódios da série"
           >
-            <Info className="w-5 h-5" />
+            <Info className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
             <span>Mais Informações</span>
           </button>
 
           <button
             onClick={() => toggleMyList(series.id)}
-            className="p-2.5 rounded-full bg-neutral-800/80 hover:bg-neutral-700 text-white border border-neutral-600 transition-all active:scale-90"
+            className="p-2.5 sm:p-3 rounded-full bg-neutral-800/80 hover:bg-neutral-700 text-white border border-neutral-600 transition-all active:scale-90 backdrop-blur-sm cursor-pointer"
             title={isInMyList ? 'Remover da Minha Lista' : 'Adicionar à Minha Lista'}
           >
-            {isInMyList ? <Check className="w-5 h-5 text-emerald-400" /> : <Plus className="w-5 h-5" />}
+            {isInMyList ? <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" /> : <Plus className="w-4 h-4 sm:w-5 sm:h-5" />}
           </button>
         </div>
       </div>

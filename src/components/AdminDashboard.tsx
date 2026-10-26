@@ -28,6 +28,8 @@ import {
   UserCheck,
   ShieldCheck,
   AlertTriangle,
+  Star,
+  Sparkles,
 } from 'lucide-react';
 import { AudioSeries, AudioEpisode, UserProfile } from '../types';
 import { SUPABASE_SQL_SCHEMA } from '../data/initialData';
@@ -39,6 +41,7 @@ export const AdminDashboard: React.FC = () => {
     series,
     episodes,
     addOrUpdateSeries,
+    setFeaturedSeries,
     deleteSeries,
     addOrUpdateEpisode,
     deleteEpisode,
@@ -186,17 +189,25 @@ export const AdminDashboard: React.FC = () => {
     e.preventDefault();
     if (!editingEpisode?.title || !editingEpisode?.seriesId) return;
 
+    const isEdit = Boolean(editingEpisode.id);
+    const targetEpisodeId = isEdit
+      ? editingEpisode.id!.trim()
+      : `ep-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const targetSeriesId = editingEpisode.seriesId.trim();
+    const episodeNum = Number(editingEpisode.episodeNumber) || 1;
+    const durMinutes = Number(editingEpisode.durationMinutes) || 20;
+
     const newEpisode: AudioEpisode = {
-      id: editingEpisode.id || `ep-${Date.now()}`,
-      seriesId: editingEpisode.seriesId,
-      episodeNumber: editingEpisode.episodeNumber || 1,
-      season: editingEpisode.season || 1,
-      title: editingEpisode.title || '',
-      synopsis: editingEpisode.synopsis || '',
-      durationMinutes: editingEpisode.durationMinutes || 20,
-      durationFormatted: editingEpisode.durationFormatted || `${editingEpisode.durationMinutes || 20} min`,
-      audioUrl: editingEpisode.audioUrl || '',
-      imageUrl: editingEpisode.imageUrl || '',
+      id: targetEpisodeId,
+      seriesId: targetSeriesId,
+      episodeNumber: episodeNum,
+      season: Number(editingEpisode.season) || 1,
+      title: editingEpisode.title.trim(),
+      synopsis: editingEpisode.synopsis?.trim() || '',
+      durationMinutes: durMinutes,
+      durationFormatted: editingEpisode.durationFormatted?.trim() || `${durMinutes} min`,
+      audioUrl: editingEpisode.audioUrl?.trim() || '',
+      imageUrl: editingEpisode.imageUrl?.trim() || '',
       createdAt: editingEpisode.createdAt || new Date().toISOString(),
     };
 
@@ -213,7 +224,7 @@ export const AdminDashboard: React.FC = () => {
 
   const filteredEpisodes = selectedSeriesFilter === 'all'
     ? episodes
-    : episodes.filter(e => e.seriesId === selectedSeriesFilter);
+    : episodes.filter(e => e.seriesId.trim().toLowerCase() === selectedSeriesFilter.trim().toLowerCase());
 
   return (
     <div className="min-h-screen bg-[#141414] text-white pt-24 pb-32 px-4 md:px-12">
@@ -592,7 +603,7 @@ export const AdminDashboard: React.FC = () => {
       {/* CONTENT TAB 3: SERIES MANAGEMENT */}
       {activeTab === 'series' && (
         <div className="py-6 space-y-6 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-white">Catálogo de Séries de Áudio</h2>
               <p className="text-xs text-neutral-400">
@@ -620,19 +631,94 @@ export const AdminDashboard: React.FC = () => {
                 });
                 setSeriesModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#E50914] hover:bg-[#b80710] text-xs md:text-sm font-bold text-white shadow-lg transition-transform active:scale-95"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#E50914] hover:bg-[#b80710] text-xs md:text-sm font-bold text-white shadow-lg transition-transform active:scale-95 self-start sm:self-auto"
             >
               <Plus className="w-4 h-4" />
               <span>Cadastrar Nova Áudio Série</span>
             </button>
           </div>
 
+          {/* FEATURED SERIES SELECTOR (REQUIREMENT 3: SELEÇÃO DA SÉRIE EM DESTAQUE NA TELA INICIAL) */}
+          {(() => {
+            const currentFeatured = series.find(s => s.featured) || series[0];
+            return (
+              <div className="bg-gradient-to-r from-neutral-900 via-neutral-900/90 to-neutral-950 border border-amber-500/40 rounded-xl p-5 shadow-xl relative overflow-hidden">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                  {/* Left: Info & Dropdown selector */}
+                  <div className="space-y-3 max-w-xl">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                        <Star className="w-5 h-5 fill-amber-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-white flex items-center gap-2">
+                          <span>Série em Destaque na Tela Inicial (Billboard Hero)</span>
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                            Principal
+                          </span>
+                        </h3>
+                        <p className="text-xs text-neutral-400">
+                          Escolha qual série ocupará o destaque principal no topo da tela inicial do aplicativo:
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                      <select
+                        value={currentFeatured?.id || ''}
+                        onChange={(e) => setFeaturedSeries(e.target.value)}
+                        className="bg-neutral-800 text-white font-semibold text-xs rounded-lg px-3.5 py-2.5 border border-amber-500/50 focus:outline-none focus:border-amber-400 shadow-sm cursor-pointer"
+                      >
+                        {series.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.featured ? '⭐ [DESTAQUE ATUAL] ' : ''}{s.title} ({s.category})
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        onClick={() => setCurrentView('home')}
+                        className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-semibold text-xs border border-neutral-700 transition-colors"
+                        title="Ver como ficou a tela inicial"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Ver na Home</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right: Mini Preview of Featured Series */}
+                  {currentFeatured && (
+                    <div className="flex items-center gap-4 bg-neutral-950/80 p-3 rounded-lg border border-neutral-800 shrink-0">
+                      <div className="w-24 h-16 rounded overflow-hidden bg-neutral-900 border border-neutral-700 shrink-0">
+                        <img
+                          src={currentFeatured.heroImage || currentFeatured.posterImage}
+                          alt={currentFeatured.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="space-y-0.5 max-w-[200px]">
+                        <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">
+                          Destaque Ativo na Home
+                        </span>
+                        <h4 className="text-xs font-bold text-white truncate">{currentFeatured.title}</h4>
+                        <p className="text-[11px] text-neutral-400 truncate">{currentFeatured.mentor}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Series Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {series.map((s) => (
               <div
                 key={s.id}
-                className="bg-neutral-900/80 rounded-xl overflow-hidden border border-neutral-800 hover:border-neutral-700 transition-all flex flex-col justify-between"
+                className={`bg-neutral-900/80 rounded-xl overflow-hidden border transition-all flex flex-col justify-between ${
+                  s.featured ? 'border-amber-500/50 shadow-lg shadow-amber-500/10' : 'border-neutral-800 hover:border-neutral-700'
+                }`}
               >
                 <div>
                   <div className="relative aspect-video w-full bg-neutral-950">
@@ -641,8 +727,9 @@ export const AdminDashboard: React.FC = () => {
                       {s.ratingBadge}
                     </div>
                     {s.featured && (
-                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-[#E50914] text-white">
-                        Billboard Hero
+                      <div className="absolute top-2 left-2 px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-black flex items-center gap-1 shadow-md">
+                        <Star className="w-3 h-3 fill-black text-black" />
+                        <span>Destaque Principal</span>
                       </div>
                     )}
                   </div>
@@ -666,16 +753,47 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-4 bg-neutral-950/60 border-t border-neutral-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs text-neutral-400">
-                    <ThumbsUp className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{s.likes}</span>
-                    <span className="text-neutral-600">|</span>
-                    <ThumbsDown className="w-3.5 h-3.5 text-red-400" />
-                    <span>{s.unlikes}</span>
-                  </div>
+                <div className="p-4 bg-neutral-950/60 border-t border-neutral-800 flex items-center justify-between gap-2">
+                  {/* Action 1: Set as featured or show active */}
+                  {s.featured ? (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-amber-400/15 border border-amber-400/40 text-amber-300 font-bold text-xs">
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      <span>Destaque Ativo</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setFeaturedSeries(s.id)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-neutral-800 hover:bg-amber-500/20 text-neutral-300 hover:text-amber-300 border border-neutral-700 hover:border-amber-500/40 text-xs font-medium transition-all"
+                      title="Destacar esta série na tela inicial do APP"
+                    >
+                      <Star className="w-3.5 h-3.5 text-neutral-400 hover:text-amber-400" />
+                      <span>Destacar no Início</span>
+                    </button>
+                  )}
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        const existingEps = episodes.filter(e => e.seriesId.trim().toLowerCase() === s.id.trim().toLowerCase());
+                        setEditingEpisode({
+                          id: undefined,
+                          seriesId: s.id,
+                          episodeNumber: existingEps.length + 1,
+                          season: 1,
+                          title: '',
+                          synopsis: '',
+                          durationMinutes: 20,
+                          durationFormatted: '20 min',
+                          audioUrl: '',
+                          imageUrl: s.posterImage || s.heroImage,
+                        });
+                        setEpisodeModalOpen(true);
+                      }}
+                      className="p-1.5 rounded hover:bg-neutral-800 text-neutral-300 hover:text-emerald-400 transition-colors"
+                      title="Adicionar novo episódio diretamente a esta série"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => openSeriesModal(s)}
                       className="p-1.5 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors"
@@ -725,16 +843,20 @@ export const AdminDashboard: React.FC = () => {
 
             <button
               onClick={() => {
+                const targetSeriesId = selectedSeriesFilter !== 'all' ? selectedSeriesFilter : (series[0]?.id || '');
+                const targetSeriesObj = series.find(s => s.id === targetSeriesId) || series[0];
+                const existingEps = episodes.filter(e => e.seriesId.trim().toLowerCase() === targetSeriesId.trim().toLowerCase());
                 setEditingEpisode({
-                  seriesId: series[0]?.id || '',
-                  episodeNumber: episodes.length + 1,
+                  id: undefined,
+                  seriesId: targetSeriesId,
+                  episodeNumber: existingEps.length + 1,
                   season: 1,
                   title: '',
                   synopsis: '',
                   durationMinutes: 20,
                   durationFormatted: '20 min',
                   audioUrl: '',
-                  imageUrl: series[0]?.posterImage || '',
+                  imageUrl: targetSeriesObj?.posterImage || targetSeriesObj?.heroImage || '',
                 });
                 setEpisodeModalOpen(true);
               }}
@@ -753,12 +875,15 @@ export const AdminDashboard: React.FC = () => {
               onChange={(e) => setSelectedSeriesFilter(e.target.value)}
               className="bg-neutral-800 text-xs text-white rounded px-3 py-1.5 border border-neutral-700 focus:outline-none"
             >
-              <option value="all">Todas as Séries ({episodes.length} eps)</option>
-              {series.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
+              <option value="all">Todas as Séries ({episodes.length} episódios)</option>
+              {series.map((s) => {
+                const sEpsCount = episodes.filter(e => e.seriesId.trim().toLowerCase() === s.id.trim().toLowerCase()).length;
+                return (
+                  <option key={s.id} value={s.id}>
+                    {s.title} ({sEpsCount} {sEpsCount === 1 ? 'ep.' : 'eps.'})
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -1223,15 +1348,51 @@ export const AdminDashboard: React.FC = () => {
                   <select
                     required
                     value={editingEpisode?.seriesId || ''}
-                    onChange={(e) => setEditingEpisode(prev => ({ ...prev, seriesId: e.target.value }))}
+                    onChange={(e) => {
+                      const newSeriesId = e.target.value;
+                      const sObj = series.find(s => s.id === newSeriesId);
+                      const epsCount = episodes.filter(ep => ep.seriesId.trim().toLowerCase() === newSeriesId.trim().toLowerCase()).length;
+                      setEditingEpisode(prev => ({
+                        ...prev,
+                        seriesId: newSeriesId,
+                        episodeNumber: prev?.id ? prev.episodeNumber : (epsCount + 1),
+                        imageUrl: prev?.imageUrl || sObj?.posterImage || sObj?.heroImage || '',
+                      }));
+                    }}
                     className="w-full bg-neutral-800 text-white rounded px-3 py-2 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
                   >
-                    {series.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.title}
-                      </option>
-                    ))}
+                    {series.map((s) => {
+                      const sCount = episodes.filter(ep => ep.seriesId.trim().toLowerCase() === s.id.trim().toLowerCase()).length;
+                      return (
+                        <option key={s.id} value={s.id}>
+                          {s.title} ({sCount} {sCount === 1 ? 'ep.' : 'eps.'})
+                        </option>
+                      );
+                    })}
                   </select>
+
+                  {/* Confirmação visual em tempo real da série vinculada */}
+                  {(() => {
+                    const currentSelected = series.find(s => s.id === editingEpisode?.seriesId);
+                    const epsCount = episodes.filter(ep => ep.seriesId.trim().toLowerCase() === editingEpisode?.seriesId?.trim().toLowerCase()).length;
+                    if (!currentSelected) return null;
+                    return (
+                      <div className="mt-2 p-2.5 rounded bg-neutral-900 border border-neutral-700/80 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 truncate">
+                          <div className="w-10 h-7 rounded overflow-hidden bg-neutral-800 shrink-0">
+                            <img src={currentSelected.posterImage || currentSelected.heroImage} alt={currentSelected.title} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="text-[11px] truncate">
+                            <p className="font-bold text-white truncate">{currentSelected.title}</p>
+                            <p className="text-neutral-400 text-[10px]">{currentSelected.category}</p>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono text-[10px] font-bold shrink-0">
+                          {epsCount} {epsCount === 1 ? 'ep. existente' : 'eps. existentes'}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div>

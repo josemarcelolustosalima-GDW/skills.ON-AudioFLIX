@@ -65,7 +65,7 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({ title, seriesList, sub
           className="flex items-center gap-3 md:gap-4 overflow-x-auto no-scrollbar px-4 md:px-12 py-2 scroll-smooth"
         >
           {seriesList.map((series) => (
-            <SeriesCard key={series.id} series={series} />
+            <SeriesCard key={series.id} series={series} className="flex-none w-40 sm:w-56 md:w-64 lg:w-72" />
           ))}
         </div>
 

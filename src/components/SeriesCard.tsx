@@ -5,9 +5,10 @@ import { Play, Plus, Check, ThumbsUp, ThumbsDown, Heart, ChevronDown, Clock } fr
 
 interface SeriesCardProps {
   series: AudioSeries;
+  className?: string;
 }
 
-export const SeriesCard: React.FC<SeriesCardProps> = ({ series }) => {
+export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => {
   const {
     openSeriesModal,
     playEpisode,
@@ -20,7 +21,9 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showReactionMenu, setShowReactionMenu] = useState(false);
 
-  const seriesEpisodes = episodes.filter(e => e.seriesId === series.id);
+  const seriesEpisodes = episodes
+    .filter(e => e.seriesId.trim().toLowerCase() === series.id.trim().toLowerCase())
+    .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
   const firstEpisode = seriesEpisodes[0];
   const isInMyList = currentUser.myList.includes(series.id);
   const currentReaction = currentUser.reactions[series.id];
@@ -47,7 +50,9 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series }) => {
 
   return (
     <div
-      className="group relative flex-none w-52 sm:w-64 md:w-72 cursor-pointer transition-all duration-300 select-none"
+      className={`group relative cursor-pointer transition-all duration-300 select-none min-w-0 ${
+        className || 'w-full'
+      }`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
         setIsHovered(false);
@@ -67,18 +72,18 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series }) => {
         />
 
         {/* Quality and Duration pill badge */}
-        <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/70 backdrop-blur-xs text-amber-300 border border-amber-300/30">
+        <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 z-10 flex items-center gap-1">
+          <span className="px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/75 backdrop-blur-xs text-amber-300 border border-amber-300/30">
             AUDIO
           </span>
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-black/75 backdrop-blur-xs text-neutral-200 border border-neutral-700 flex items-center gap-1">
-            <Clock className="w-2.5 h-2.5 text-amber-400" />
-            {series.episodeDurationEstimate || (firstEpisode ? firstEpisode.durationFormatted : '20 min')}
+          <span className="px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold bg-black/80 backdrop-blur-xs text-neutral-200 border border-neutral-700 flex items-center gap-1">
+            <Clock className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-amber-400" />
+            <span className="truncate max-w-[60px] sm:max-w-none">{series.episodeDurationEstimate || (firstEpisode ? firstEpisode.durationFormatted : '20 min')}</span>
           </span>
         </div>
 
         {/* Rating badge */}
-        <div className="absolute top-2 right-2 z-10 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/70 backdrop-blur-xs text-neutral-300 border border-neutral-700">
+        <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 z-10 px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/75 backdrop-blur-xs text-neutral-300 border border-neutral-700">
           {series.ratingBadge}
         </div>
 
@@ -86,9 +91,9 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series }) => {
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
 
         {/* Title overlay in card base */}
-        <div className="absolute bottom-2.5 left-3 right-3 z-10">
-          <p className="text-xs font-semibold text-neutral-300 truncate">{series.mentor}</p>
-          <h4 className="text-sm font-bold text-white truncate drop-shadow">{series.title}</h4>
+        <div className="absolute bottom-2 sm:bottom-2.5 left-2 sm:left-3 right-2 sm:right-3 z-10">
+          <p className="text-[10px] sm:text-xs font-semibold text-neutral-300 truncate">{series.mentor}</p>
+          <h4 className="text-xs sm:text-sm font-bold text-white truncate drop-shadow">{series.title}</h4>
         </div>
       </div>
 

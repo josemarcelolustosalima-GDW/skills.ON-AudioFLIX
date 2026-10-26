@@ -13,7 +13,14 @@ import { AudioPlayer } from './components/AudioPlayer';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import { SeriesCard } from './components/SeriesCard';
-import { Search, Sparkles, Heart, Bookmark, Filter, ShieldCheck } from 'lucide-react';
+import {
+  Search,
+  Heart,
+  Bookmark,
+  Home,
+  Layers,
+  Shield,
+} from 'lucide-react';
 
 function MainApp() {
   const {
@@ -70,18 +77,20 @@ function MainApp() {
 
       {/* RENDER VIEW: ADMIN DASHBOARD */}
       {currentView === 'admin' ? (
-        <AdminDashboard />
+        <div className="pb-24 md:pb-12">
+          <AdminDashboard />
+        </div>
       ) : (
-        /* REGULAR NETFLIX EXPERIENCE */
-        <main className="flex-1 pb-24">
+        /* REGULAR NETFLIX EXPERIENCE (MOBILE ADAPTED WITH SAFE CLEARANCE) */
+        <main className="flex-1 pb-28 md:pb-24">
           {/* SEARCH RESULTS VIEW */}
           {searchQuery ? (
-            <div className="pt-28 px-4 md:px-12 max-w-7xl mx-auto space-y-6">
+            <div className="pt-24 md:pt-28 px-3 sm:px-6 md:px-12 max-w-7xl mx-auto space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
                 <div>
-                  <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+                  <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white flex items-center gap-2">
                     <Search className="w-5 h-5 text-[#E50914]" />
-                    <span>Resultados para: &ldquo;{searchQuery}&rdquo;</span>
+                    <span className="truncate">Busca: &ldquo;{searchQuery}&rdquo;</span>
                   </h1>
                   <p className="text-xs text-neutral-400 mt-1">
                     {searchResults.length} áudio séries encontradas
@@ -89,9 +98,9 @@ function MainApp() {
                 </div>
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="text-xs text-neutral-400 hover:text-white underline"
+                  className="text-xs text-neutral-400 hover:text-white underline cursor-pointer shrink-0 ml-2"
                 >
-                  Limpar busca
+                  Limpar
                 </button>
               </div>
 
@@ -101,7 +110,7 @@ function MainApp() {
                   <p className="text-xs text-neutral-500">Tente buscar por &ldquo;Liderança&rdquo;, &ldquo;Vendas&rdquo;, &ldquo;David Chen&rdquo; ou explore o catálogo inicial.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                   {searchResults.map(s => (
                     <SeriesCard key={s.id} series={s} />
                   ))}
@@ -110,10 +119,10 @@ function MainApp() {
             </div>
           ) : currentView === 'my_list' ? (
             /* MINHA LISTA VIEW */
-            <div className="pt-28 px-4 md:px-12 max-w-7xl mx-auto space-y-6">
+            <div className="pt-24 md:pt-28 px-3 sm:px-6 md:px-12 max-w-7xl mx-auto space-y-6">
               <div className="border-b border-neutral-800 pb-4">
-                <h1 className="text-2xl md:text-3xl font-extrabold text-white flex items-center gap-2.5">
-                  <Bookmark className="w-6 h-6 text-[#E50914]" />
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white flex items-center gap-2.5">
+                  <Bookmark className="w-5 h-5 sm:w-6 sm:h-6 text-[#E50914]" />
                   <span>Minha Lista de Treinamentos</span>
                 </h1>
                 <p className="text-xs text-neutral-400 mt-1">
@@ -125,17 +134,17 @@ function MainApp() {
                 <div className="py-24 text-center text-neutral-400 space-y-3">
                   <p className="text-base font-semibold">Sua lista está vazia no momento.</p>
                   <p className="text-xs text-neutral-500">
-                    Clique no botão <strong>+</strong> nos cards das séries para adicioná-las aqui.
+                    Toque no botão <strong>+</strong> nos cards das séries para adicioná-las aqui.
                   </p>
                   <button
                     onClick={() => setCurrentView('home')}
-                    className="px-5 py-2.5 rounded bg-white text-black font-bold text-xs hover:bg-neutral-200 transition-colors inline-block mt-2"
+                    className="px-5 py-2.5 rounded bg-white text-black font-bold text-xs hover:bg-neutral-200 transition-colors inline-block mt-2 cursor-pointer"
                   >
                     Explorar Catálogo
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                   {myListSeries.map(s => (
                     <SeriesCard key={s.id} series={s} />
                   ))}
@@ -144,29 +153,29 @@ function MainApp() {
             </div>
           ) : currentView === 'top_rated' ? (
             /* MAIS BEM AVALIADAS VIEW */
-            <div className="pt-28 px-4 md:px-12 max-w-7xl mx-auto space-y-6">
+            <div className="pt-24 md:pt-28 px-3 sm:px-6 md:px-12 max-w-7xl mx-auto space-y-6">
               <div className="border-b border-neutral-800 pb-4">
-                <h1 className="text-2xl md:text-3xl font-extrabold text-white flex items-center gap-2.5">
-                  <Heart className="w-6 h-6 text-[#E50914]" />
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white flex items-center gap-2.5">
+                  <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-[#E50914]" />
                   <span>Mais Bem Avaliadas pelos Alunos</span>
                 </h1>
                 <p className="text-xs text-neutral-400 mt-1">
-                  Ranking consolidado com maior índice de aprovação (Likes & Amei) da plataforma.
+                  Ranking consolidado com maior índice de aprovação da plataforma.
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                 {topRatedSeries.map(s => (
                   <SeriesCard key={s.id} series={s} />
                 ))}
               </div>
             </div>
           ) : currentView === 'series_catalog' ? (
-            /* FULL CATALOG VIEW WITH CATEGORY FILTERS */
-            <div className="pt-28 px-4 md:px-12 max-w-7xl mx-auto space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-800 pb-4">
+            /* FULL CATALOG VIEW WITH CATEGORY FILTERS (SÉRIES DE TREINAMENTO) */
+            <div className="pt-24 md:pt-28 px-3 sm:px-6 md:px-12 max-w-7xl mx-auto space-y-6 md:space-y-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-800 pb-4 md:pb-5">
                 <div>
-                  <h1 className="text-2xl md:text-3xl font-extrabold text-white">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white">
                     Catálogo Completo de Áudio Séries
                   </h1>
                   <p className="text-xs text-neutral-400 mt-1">
@@ -175,10 +184,10 @@ function MainApp() {
                 </div>
 
                 {/* Filter tabs */}
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
                   <button
                     onClick={() => setSelectedCategoryFilter('Todas')}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                    className={`px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                       selectedCategoryFilter === 'Todas'
                         ? 'bg-white text-black'
                         : 'bg-neutral-800 text-neutral-300 hover:text-white'
@@ -190,7 +199,7 @@ function MainApp() {
                     <button
                       key={cat}
                       onClick={() => setSelectedCategoryFilter(cat)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                      className={`px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                         selectedCategoryFilter === cat
                           ? 'bg-white text-black'
                           : 'bg-neutral-800 text-neutral-300 hover:text-white'
@@ -202,7 +211,7 @@ function MainApp() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                 {(selectedCategoryFilter === 'Todas'
                   ? series
                   : series.filter(s => s.category === selectedCategoryFilter)
@@ -218,7 +227,7 @@ function MainApp() {
               {featuredSeries && <HeroBillboard series={featuredSeries} />}
 
               {/* Negative margin row stack like Netflix */}
-              <div className="relative -mt-8 md:-mt-14 z-20 space-y-2 md:space-y-4">
+              <div className="relative -mt-6 sm:-mt-8 md:-mt-14 z-20 space-y-2 md:space-y-4">
                 {/* Row 1: Continuar Ouvindo (if any in progress) */}
                 {continueListeningSeries.length > 0 && (
                   <CategoryRow
@@ -255,7 +264,7 @@ function MainApp() {
       {/* Netflix Series Details & Episode List Modal */}
       <SeriesDetailModal />
 
-      {/* Persistent Audio Player (Floating Bottom Bar + Theater Fullscreen) */}
+      {/* Persistent Audio Player (Visão Expandida Imersiva Oficial) */}
       <AudioPlayer />
 
       {/* User Login & Password Modal */}
@@ -264,31 +273,31 @@ function MainApp() {
         onClose={() => setAuthModalOpen(false)}
       />
 
-      {/* Netflix Standard Dark Footer */}
-      <footer className="mt-auto border-t border-neutral-900 bg-[#101010] py-10 px-4 md:px-12 text-neutral-500 text-xs">
+      {/* Netflix Standard Dark Footer (with clearance for mobile bottom nav) */}
+      <footer className="mt-auto border-t border-neutral-900 bg-[#101010] py-8 sm:py-10 px-4 md:px-12 text-neutral-500 text-xs mb-14 md:mb-0">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <img
               src="/assets/aistudio/skills_ON_BRANCO_transparente_a2b697f4.png"
               alt="skills.ON! Educação Executiva"
-              className="h-8 md:h-9 object-contain"
+              className="h-7 sm:h-8 md:h-9 object-contain"
             />
             <span className="hidden sm:inline text-neutral-600">|</span>
             <span className="text-neutral-400">Plataforma de Treinamento Imersivo em Áudio Séries</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-neutral-400">
-            <button onClick={() => setCurrentView('home')} className="text-left hover:underline">
+            <button onClick={() => { setCurrentView('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-left hover:underline cursor-pointer">
               Início do Catálogo
             </button>
-            <button onClick={() => setCurrentView('series_catalog')} className="text-left hover:underline">
+            <button onClick={() => { setCurrentView('series_catalog'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-left hover:underline cursor-pointer">
               Todas as Séries
             </button>
-            <button onClick={() => setCurrentView('top_rated')} className="text-left hover:underline">
+            <button onClick={() => { setCurrentView('top_rated'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-left hover:underline cursor-pointer">
               Mais Votadas
             </button>
             {currentUser.role === 'admin' && (
-              <button onClick={() => setCurrentView('admin')} className="text-left hover:underline text-[#E50914] font-semibold">
+              <button onClick={() => { setCurrentView('admin'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-left hover:underline text-[#E50914] font-semibold cursor-pointer">
                 Painel Administrativo
               </button>
             )}
@@ -299,13 +308,86 @@ function MainApp() {
             <p className="flex items-center gap-1.5">
               <span>Hospedagem Netlify</span>
               <span>•</span>
-              <span>Banco Supabase Ready</span>
-              <span>•</span>
               <span>Google Drive Audio Stream</span>
             </p>
           </div>
         </div>
       </footer>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR (Padrão Netflix / Spotify para Smartphones) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#121212]/95 backdrop-blur-md border-t border-neutral-800/90 px-2 py-1.5 flex items-center justify-around select-none">
+        <button
+          onClick={() => {
+            setCurrentView('home');
+            setSearchQuery('');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors cursor-pointer active:scale-95 ${
+            currentView === 'home' && !searchQuery ? 'text-white' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Home className={`w-5 h-5 ${currentView === 'home' && !searchQuery ? 'text-[#E50914]' : ''}`} />
+          <span className="text-[10px] font-medium mt-0.5">Início</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setCurrentView('series_catalog');
+            setSearchQuery('');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors cursor-pointer active:scale-95 ${
+            currentView === 'series_catalog' ? 'text-white' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Layers className={`w-5 h-5 ${currentView === 'series_catalog' ? 'text-[#E50914]' : ''}`} />
+          <span className="text-[10px] font-medium mt-0.5">Séries</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setCurrentView('top_rated');
+            setSearchQuery('');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors cursor-pointer active:scale-95 ${
+            currentView === 'top_rated' ? 'text-white' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Heart className={`w-5 h-5 ${currentView === 'top_rated' ? 'text-[#E50914]' : ''}`} />
+          <span className="text-[10px] font-medium mt-0.5">Mais Votadas</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setCurrentView('my_list');
+            setSearchQuery('');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors cursor-pointer active:scale-95 ${
+            currentView === 'my_list' ? 'text-white' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          <Bookmark className={`w-5 h-5 ${currentView === 'my_list' ? 'text-[#E50914]' : ''}`} />
+          <span className="text-[10px] font-medium mt-0.5">Minha Lista</span>
+        </button>
+
+        {currentUser.role === 'admin' && (
+          <button
+            onClick={() => {
+              setCurrentView('admin');
+              setSearchQuery('');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors cursor-pointer active:scale-95 ${
+              currentView === 'admin' ? 'text-white' : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <Shield className={`w-5 h-5 ${currentView === 'admin' ? 'text-[#E50914]' : ''}`} />
+            <span className="text-[10px] font-medium mt-0.5">Admin</span>
+          </button>
+        )}
+      </nav>
     </div>
   );
 }

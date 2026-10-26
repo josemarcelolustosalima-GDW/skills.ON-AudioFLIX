@@ -3,14 +3,14 @@ import { useApp } from '../context/AppContext';
 import {
   Play,
   Pause,
+  Square,
+  X,
   RotateCcw,
   RotateCw,
   SkipBack,
   SkipForward,
   Volume2,
   VolumeX,
-  Maximize2,
-  Minimize2,
   ThumbsUp,
   ThumbsDown,
   HardDrive,
@@ -43,6 +43,8 @@ export const AudioPlayer: React.FC = () => {
     drivePreviewEmbedUrl,
     driveDirectWebUrl,
     togglePlayPause,
+    stopAudio,
+    closePlayerAndGoHome,
     seekTo,
     skipSeconds,
     setSpeed,
@@ -54,20 +56,22 @@ export const AudioPlayer: React.FC = () => {
     toggleReaction,
     episodes,
     playEpisode,
-    openSeriesModal,
+    isPlayerExpanded,
   } = useApp();
 
-  const [isExpanded, setIsExpanded] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
 
-  if (!currentPlayingEpisode) return null;
+  // Requirement: ONLY the expanded theater view is active. No docked bottom bar.
+  if (!isPlayerExpanded || !currentPlayingEpisode) return null;
 
   const currentReaction = currentPlayingSeries ? currentUser.reactions[currentPlayingSeries.id] : null;
   const speedOptions = [0.75, 1.0, 1.25, 1.5, 2.0];
 
   // Series episodes for queue
   const seriesEpisodes = currentPlayingSeries
-    ? episodes.filter(e => e.seriesId === currentPlayingSeries.id)
+    ? episodes
+        .filter(e => e.seriesId.trim().toLowerCase() === currentPlayingSeries.id.trim().toLowerCase())
+        .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0))
     : [];
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -76,584 +80,371 @@ export const AudioPlayer: React.FC = () => {
   };
 
   return (
-    <>
-      {/* EXPANDED FULLSCREEN THEATER VIEW */}
-      {isExpanded && (
-        <div className="fixed inset-0 z-50 bg-[#141414] flex flex-col justify-between p-6 md:p-12 animate-in fade-in duration-300 overflow-y-auto">
-          {/* Top Bar in Theater Mode */}
-          <div className="flex items-center justify-between pb-4 border-b border-neutral-800 shrink-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-bold tracking-tight text-[#E50914] font-brand">
-                skills<span className="text-white">.ON!</span>
-              </span>
-              <span className="text-neutral-500">|</span>
-              <span className="text-sm text-neutral-300 font-medium">Modo Imersivo de Reprodução</span>
-            </div>
+    <div className="fixed inset-0 z-[70] bg-[#141414] flex flex-col justify-between p-3.5 sm:p-6 md:p-12 animate-in fade-in duration-300 overflow-y-auto select-none">
+      {/* Top Header Bar in Theater Mode - Fully Responsive for Smartphones */}
+      <div className="flex items-center justify-between gap-2 pb-3 md:pb-4 border-b border-neutral-800 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="text-lg sm:text-xl font-bold tracking-tight text-[#E50914] font-brand shrink-0">
+            skills<span className="text-white">.ON!</span>
+          </span>
+          <span className="hidden sm:inline text-neutral-500">|</span>
+          <span className="hidden sm:inline text-xs sm:text-sm text-neutral-300 font-medium truncate">Modo Imersivo</span>
+        </div>
 
-            <div className="flex items-center gap-3">
-              {drivePreviewEmbedUrl && (
-                <button
-                  onClick={() => toggleEmbedPlayer(!isUsingEmbedPlayer)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${
-                    isUsingEmbedPlayer
-                      ? 'bg-blue-600 border-blue-500 text-white'
-                      : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:text-white'
-                  }`}
-                  title="Alternar entre Player Nativo e Player Embutido do Google Drive"
-                >
-                  <Tv className="w-4 h-4" />
-                  <span>{isUsingEmbedPlayer ? 'Player Embutido Ativo' : 'Player Google Drive'}</span>
-                </button>
-              )}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {drivePreviewEmbedUrl && (
+            <button
+              onClick={() => toggleEmbedPlayer(!isUsingEmbedPlayer)}
+              className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded text-xs font-semibold border transition-colors cursor-pointer ${
+                isUsingEmbedPlayer
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:text-white'
+              }`}
+              title="Alternar entre Player Nativo e Player Embutido do Google Drive"
+            >
+              <Tv className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{isUsingEmbedPlayer ? 'Drive Ativo' : 'Player Drive'}</span>
+            </button>
+          )}
 
-              <button
-                onClick={() => setShowQueue(!showQueue)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${
-                  showQueue
-                    ? 'bg-[#E50914] border-[#E50914] text-white'
-                    : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:text-white'
-                }`}
-              >
-                <ListMusic className="w-4 h-4" />
-                <span>Episódios da Série</span>
-              </button>
+          <button
+            onClick={() => setShowQueue(!showQueue)}
+            className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded text-xs font-semibold border transition-colors cursor-pointer ${
+              showQueue
+                ? 'bg-[#E50914] border-[#E50914] text-white'
+                : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:text-white'
+            }`}
+          >
+            <ListMusic className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Episódios</span>
+            <span className="sm:hidden">Fila</span>
+          </button>
 
-              <button
-                onClick={() => setIsExpanded(false)}
-                className="p-2 rounded-full bg-neutral-800 hover:bg-neutral-700 text-white transition-colors cursor-pointer"
-                title="Minimizar player"
-              >
-                <Minimize2 className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+          {/* Botão STOP no topo (otimizado para toque) */}
+          <button
+            onClick={stopAudio}
+            className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-neutral-200 border border-neutral-700 hover:border-red-500 transition-all cursor-pointer shadow-md active:scale-95"
+            title="Parar reprodução de áudio (Stop)"
+          >
+            <Square className="w-3.5 h-3.5 fill-[#E50914] text-[#E50914]" />
+            <span>Stop</span>
+          </button>
 
-          {/* Center: Stage with artwork / embed player */}
-          <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16 py-6 max-w-5xl mx-auto w-full">
-            {/* Artwork Card or Google Drive Embed Player */}
-            <div className="w-full max-w-md md:max-w-lg">
-              {isUsingEmbedPlayer && drivePreviewEmbedUrl ? (
-                <div className="w-full bg-neutral-900 border border-blue-500/40 rounded-xl p-4 shadow-2xl space-y-3">
-                  <div className="flex items-center justify-between text-xs text-blue-400 font-bold">
-                    <span className="flex items-center gap-1.5">
-                      <HardDrive className="w-4 h-4" />
-                      Player Oficial do Google Drive (Nativo)
-                    </span>
-                    <button
-                      onClick={() => toggleEmbedPlayer(false)}
-                      className="text-neutral-400 hover:text-white underline text-[11px]"
-                    >
-                      Voltar ao Player da Plataforma
-                    </button>
-                  </div>
-                  <iframe
-                    src={drivePreviewEmbedUrl}
-                    className="w-full h-44 rounded-lg bg-black border border-neutral-800"
-                    allow="autoplay"
-                    title="Google Drive Audio Preview"
-                  />
-                  <p className="text-[11px] text-neutral-400 text-center">
-                    Este player oficial do Google Drive reproduz áudios mesmo com restrições de antivírus do Google.
-                  </p>
-                </div>
-              ) : (
-                <div className="relative aspect-video w-full rounded-xl overflow-hidden shadow-2xl border border-neutral-800 group">
-                  <img
-                    src={currentPlayingEpisode.imageUrl || currentPlayingSeries?.heroImage}
-                    alt={currentPlayingEpisode.title}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                  
-                  {/* Audio Waveform animation overlay */}
-                  <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-1 h-8">
-                    {Array.from({ length: 24 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`w-1 rounded-full bg-[#E50914] transition-all duration-150 ${
-                          isPlaying ? 'animate-pulse' : 'opacity-40'
-                        }`}
-                        style={{
-                          height: isPlaying ? `${Math.max(15, (Math.sin(i * 0.8 + currentTime * 3) + 1) * 50)}%` : '20%',
-                          animationDelay: `${i * 40}ms`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+          {/* Botão FECHAR: Fecha a visão expandida e retorna automaticamente à tela principal */}
+          <button
+            onClick={closePlayerAndGoHome}
+            className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-[#E50914] hover:bg-[#b80710] text-xs font-bold text-white transition-all cursor-pointer shadow-lg active:scale-95"
+            title="Fechar player e voltar para a tela principal"
+          >
+            <X className="w-4 h-4" />
+            <span>Fechar</span>
+          </button>
+        </div>
+      </div>
 
-            {/* Info and Details */}
-            <div className="flex-1 space-y-4 text-center md:text-left w-full">
-              {currentPlayingSeries && (
-                <div className="flex items-center justify-center md:justify-start gap-2 text-xs font-bold uppercase tracking-wider text-[#E50914]">
-                  <span>{currentPlayingSeries.category}</span>
-                  <span className="text-neutral-500">•</span>
-                  <span>{currentPlayingSeries.audioQuality}</span>
-                </div>
-              )}
-
-              <h2 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight">
-                {currentPlayingEpisode.title}
-              </h2>
-
-              <p className="text-base font-semibold text-neutral-300">
-                {currentPlayingSeries?.title} — {currentPlayingSeries?.mentor}
-              </p>
-
-              <p className="text-sm text-neutral-400 max-w-xl leading-relaxed">
-                {currentPlayingEpisode.synopsis}
-              </p>
-
-              {/* Episode Duration Display */}
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-1">
-                <span className="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" />
-                  Duração: {currentPlayingEpisode.durationFormatted || `${currentPlayingEpisode.durationMinutes} min`}
+      {/* Center Stage: Artwork / Embed Player + Metadata (Responsive on Mobile) */}
+      <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-4 sm:gap-8 md:gap-16 py-3 sm:py-6 max-w-5xl mx-auto w-full my-auto">
+        {/* Artwork Card or Google Drive Embed Player */}
+        <div className="w-full max-w-[260px] sm:max-w-sm md:max-w-lg shrink-0">
+          {isUsingEmbedPlayer && drivePreviewEmbedUrl ? (
+            <div className="w-full bg-neutral-900 border border-blue-500/40 rounded-xl p-3 sm:p-4 shadow-2xl space-y-2 sm:space-y-3">
+              <div className="flex items-center justify-between text-xs text-blue-400 font-bold">
+                <span className="flex items-center gap-1.5">
+                  <HardDrive className="w-4 h-4" />
+                  Player Google Drive (Nativo)
                 </span>
-                {currentPlayingSeries?.episodeDurationEstimate && (
-                  <span className="text-[11px] text-neutral-400 bg-neutral-800/80 px-2 py-1 rounded border border-neutral-700">
-                    Série: ~{currentPlayingSeries.episodeDurationEstimate}
-                  </span>
-                )}
+                <button
+                  onClick={() => toggleEmbedPlayer(false)}
+                  className="text-neutral-400 hover:text-white underline text-[11px] cursor-pointer"
+                >
+                  Voltar
+                </button>
               </div>
-
-              {/* Source Info Badge */}
-              <div className="pt-2 flex flex-wrap items-center justify-center md:justify-start gap-3">
-                {audioSourceInfo.isGoogleDrive && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-blue-500/10 border border-blue-500/30 text-xs font-semibold text-blue-400">
-                    <HardDrive className="w-3.5 h-3.5" />
-                    Google Drive Stream Conectado
-                  </span>
-                )}
-                {currentPlayingSeries && (
-                  <div className="flex items-center gap-1 bg-neutral-800/80 px-3 py-1 rounded border border-neutral-700 text-xs text-neutral-300">
-                    <ThumbsUp className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{currentPlayingSeries.likes} curtidas</span>
-                  </div>
-                )}
-              </div>
+              <iframe
+                src={drivePreviewEmbedUrl}
+                className="w-full h-36 sm:h-44 rounded-lg bg-black border border-neutral-800"
+                allow="autoplay"
+                title="Google Drive Audio Preview"
+              />
+              <p className="text-[10px] sm:text-[11px] text-neutral-400 text-center">
+                Reproduz áudios do Google Drive com proteção direta.
+              </p>
             </div>
-          </div>
-
-          {/* Episode Queue Sidebar (Theater mode) */}
-          {showQueue && (
-            <div className="max-h-48 overflow-y-auto mb-4 bg-neutral-900/90 rounded-lg p-3 border border-neutral-800">
-              <p className="text-xs font-bold uppercase text-neutral-400 mb-2">Fila de Reprodução da Série</p>
-              <div className="space-y-1">
-                {seriesEpisodes.map((ep) => (
-                  <button
-                    key={ep.id}
-                    onClick={() => playEpisode(ep, currentPlayingSeries || undefined)}
-                    className={`w-full text-left px-3 py-2 rounded flex items-center justify-between text-xs transition-colors cursor-pointer ${
-                      ep.id === currentPlayingEpisode.id
-                        ? 'bg-[#E50914]/20 text-[#E50914] font-bold border border-[#E50914]/40'
-                        : 'text-neutral-300 hover:bg-neutral-800'
+          ) : (
+            <div className="relative aspect-video w-full rounded-xl overflow-hidden shadow-2xl border border-neutral-800 group">
+              <img
+                src={currentPlayingEpisode.imageUrl || currentPlayingSeries?.heroImage || currentPlayingSeries?.posterImage}
+                alt={currentPlayingEpisode.title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/src/assets/images/skills_hero_leadership_1792881116508.jpg';
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              
+              {/* Audio Waveform animation overlay */}
+              <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-1 h-6 sm:h-8">
+                {Array.from({ length: 24 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`w-1 rounded-full bg-[#E50914] transition-all duration-150 ${
+                      isPlaying ? 'animate-pulse' : 'opacity-40'
                     }`}
-                  >
-                    <span className="truncate">
-                      Ep. {ep.episodeNumber}: {ep.title}
-                    </span>
-                    <span className="text-neutral-500 shrink-0 ml-2">{ep.durationFormatted}</span>
-                  </button>
+                    style={{
+                      height: isPlaying ? `${Math.max(15, (Math.sin(i * 0.8 + currentTime * 3) + 1) * 50)}%` : '20%',
+                      animationDelay: `${i * 35}ms`,
+                    }}
+                  />
                 ))}
               </div>
             </div>
           )}
+        </div>
 
-          {/* Diagnostic banner if error in Theater mode */}
-          {audioError && (
-            <div className="mb-3 max-w-4xl mx-auto w-full p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-xs text-amber-300 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>{audioError}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {drivePreviewEmbedUrl && !isUsingEmbedPlayer && (
-                  <button
-                    onClick={() => toggleEmbedPlayer(true)}
-                    className="px-3 py-1 rounded bg-amber-500 text-black font-bold hover:bg-amber-400 transition-colors"
-                  >
-                    Ativar Player Seguro Drive
-                  </button>
-                )}
-                {driveDirectWebUrl && (
-                  <a
-                    href={driveDirectWebUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1 rounded bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-700 flex items-center gap-1"
-                  >
-                    <span>Abrir no Drive</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
-                <button
-                  onClick={retryPlayback}
-                  className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700"
-                  title="Tentar recarregar"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-              </div>
+        {/* Info and Details */}
+        <div className="flex-1 space-y-2 sm:space-y-4 text-center md:text-left w-full min-w-0">
+          {currentPlayingSeries && (
+            <div className="flex items-center justify-center md:justify-start gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#E50914]">
+              <span className="truncate max-w-[140px] sm:max-w-none">{currentPlayingSeries.category}</span>
+              <span className="text-neutral-500">•</span>
+              <span>{currentPlayingSeries.audioQuality}</span>
             </div>
           )}
 
-          {/* Controls Bar in Theater Mode */}
-          <div className="pt-4 border-t border-neutral-800 max-w-4xl mx-auto w-full space-y-3 shrink-0">
-            {/* Seeker */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-mono tabular-nums text-neutral-400 w-12 text-right">
-                {formatTime(currentTime)}
+          <h2 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight line-clamp-2">
+            {currentPlayingEpisode.title}
+          </h2>
+
+          <p className="text-xs sm:text-base font-semibold text-neutral-300 truncate">
+            {currentPlayingSeries?.title} — {currentPlayingSeries?.mentor}
+          </p>
+
+          <p className="text-xs sm:text-sm text-neutral-400 max-w-xl leading-relaxed line-clamp-2 sm:line-clamp-3 md:line-clamp-none">
+            {currentPlayingEpisode.synopsis}
+          </p>
+
+          {/* Episode Duration Display */}
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-0.5 sm:pt-1">
+            <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] sm:text-xs font-semibold flex items-center gap-1">
+              <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <span>Duração: {currentPlayingEpisode.durationFormatted || `${currentPlayingEpisode.durationMinutes} min`}</span>
+            </span>
+            {currentPlayingSeries?.episodeDurationEstimate && (
+              <span className="text-[10px] sm:text-[11px] text-neutral-400 bg-neutral-800/80 px-2 py-0.5 sm:py-1 rounded border border-neutral-700 hidden sm:inline-block">
+                Série: ~{currentPlayingSeries.episodeDurationEstimate}
               </span>
-              <div className="relative flex-1 group">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={handleSeekChange}
-                  className="w-full h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#E50914]"
-                />
-              </div>
-              <span className="text-xs font-mono tabular-nums text-neutral-400 w-12">
-                {formatTime(duration)}
+            )}
+          </div>
+
+          {/* Source Info Badge */}
+          <div className="pt-1 flex flex-wrap items-center justify-center md:justify-start gap-2 sm:gap-3">
+            {audioSourceInfo.isGoogleDrive && (
+              <span className="inline-flex items-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 rounded bg-blue-500/10 border border-blue-500/30 text-[10px] sm:text-xs font-semibold text-blue-400">
+                <HardDrive className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                Google Drive Stream
               </span>
-            </div>
-
-            {/* Buttons Row */}
-            <div className="flex items-center justify-between">
-              {/* Reactions */}
-              <div className="flex items-center gap-1">
-                {currentPlayingSeries && (
-                  <>
-                    <button
-                      onClick={() => toggleReaction(currentPlayingSeries.id, 'like')}
-                      className={`p-2 rounded-full transition-colors cursor-pointer ${
-                        currentReaction === 'like' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
-                      }`}
-                      title="Gostei"
-                    >
-                      <ThumbsUp className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => toggleReaction(currentPlayingSeries.id, 'dislike')}
-                      className={`p-2 rounded-full transition-colors cursor-pointer ${
-                        currentReaction === 'dislike' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
-                      }`}
-                      title="Não é para mim"
-                    >
-                      <ThumbsDown className="w-5 h-5" />
-                    </button>
-                  </>
-                )}
+            )}
+            {currentPlayingSeries && (
+              <div className="flex items-center gap-1 bg-neutral-800/80 px-2 sm:px-3 py-0.5 sm:py-1 rounded border border-neutral-700 text-[10px] sm:text-xs text-neutral-300">
+                <ThumbsUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
+                <span>{currentPlayingSeries.likes} curtidas</span>
               </div>
+            )}
+          </div>
+        </div>
+      </div>
 
-              {/* Central Audio Controls */}
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={prevEpisode}
-                  className="p-2 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                  title="Episódio Anterior"
-                >
-                  <SkipBack className="w-5 h-5" />
-                </button>
-
-                <button
-                  onClick={() => skipSeconds(-10)}
-                  className="p-2 text-neutral-300 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer"
-                  title="Voltar 10 segundos"
-                >
-                  <RotateCcw className="w-5 h-5" />
-                  <span className="text-[10px] font-bold">10</span>
-                </button>
-
-                <button
-                  onClick={togglePlayPause}
-                  disabled={audioLoading}
-                  className="w-14 h-14 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-transform active:scale-95 shadow-xl cursor-pointer disabled:opacity-80"
-                  title={isPlaying ? 'Pausar' : 'Reproduzir'}
-                >
-                  {audioLoading ? (
-                    <Loader2 className="w-6 h-6 text-black animate-spin" />
-                  ) : isPlaying ? (
-                    <Pause className="w-6 h-6 fill-black" />
-                  ) : (
-                    <Play className="w-6 h-6 fill-black translate-x-0.5" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => skipSeconds(10)}
-                  className="p-2 text-neutral-300 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer"
-                  title="Avançar 10 segundos"
-                >
-                  <RotateCw className="w-5 h-5" />
-                  <span className="text-[10px] font-bold">10</span>
-                </button>
-
-                <button
-                  onClick={nextEpisode}
-                  className="p-2 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                  title="Próximo Episódio"
-                >
-                  <SkipForward className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Speed & Volume */}
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => {
-                    const nextIdx = (speedOptions.indexOf(playbackRate) + 1) % speedOptions.length;
-                    setSpeed(speedOptions[nextIdx]);
-                  }}
-                  className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-white transition-colors border border-neutral-700 cursor-pointer"
-                >
-                  {playbackRate}x
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <button onClick={toggleMute} className="text-neutral-300 hover:text-white cursor-pointer">
-                    {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                  </button>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={isMuted ? 0 : volume}
-                    onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
-                    className="w-20 h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#E50914]"
-                  />
-                </div>
-              </div>
-            </div>
+      {/* Episode Queue Drawer (Theater mode) */}
+      {showQueue && (
+        <div className="max-h-36 sm:max-h-48 overflow-y-auto mb-3 sm:mb-4 bg-neutral-900/90 rounded-lg p-2.5 sm:p-3 border border-neutral-800 max-w-4xl mx-auto w-full">
+          <p className="text-[11px] sm:text-xs font-bold uppercase text-neutral-400 mb-1.5 sm:mb-2">Fila de Episódios</p>
+          <div className="space-y-1">
+            {seriesEpisodes.map((ep) => (
+              <button
+                key={ep.id}
+                onClick={() => playEpisode(ep, currentPlayingSeries || undefined)}
+                className={`w-full text-left px-2.5 py-1.5 sm:py-2 rounded flex items-center justify-between text-xs transition-colors cursor-pointer active:scale-98 ${
+                  ep.id === currentPlayingEpisode.id
+                    ? 'bg-[#E50914]/20 text-[#E50914] font-bold border border-[#E50914]/40'
+                    : 'text-neutral-300 hover:bg-neutral-800'
+                }`}
+              >
+                <span className="truncate mr-2">
+                  Ep. {ep.episodeNumber}: {ep.title}
+                </span>
+                <span className="text-neutral-500 shrink-0 text-[11px]">{ep.durationFormatted}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
 
-      {/* DOCKED BOTTOM BAR AUDIO PLAYER (Always Visible When Audio Loaded) */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#181818]/95 backdrop-blur-md border-t border-neutral-800 shadow-2xl select-none">
-        {/* Error notification banner if any */}
-        {audioError && (
-          <div className="bg-amber-950/80 border-b border-amber-500/40 px-4 py-1.5 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>{audioError}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {drivePreviewEmbedUrl && (
-                <button
-                  onClick={() => toggleEmbedPlayer(!isUsingEmbedPlayer)}
-                  className="px-2 py-0.5 rounded bg-amber-400 text-black text-[11px] font-bold hover:bg-amber-300 transition-colors"
-                >
-                  {isUsingEmbedPlayer ? 'Ocultar Player Drive' : 'Abrir Player Seguro Drive'}
-                </button>
-              )}
-              {driveDirectWebUrl && (
-                <a
-                  href={driveDirectWebUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 text-[11px] flex items-center gap-1"
-                >
-                  <span>Abrir no Drive</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
-              <button
-                onClick={retryPlayback}
-                className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 text-[11px]"
-                title="Tentar novamente"
-              >
-                <RefreshCw className="w-3 h-3" />
-              </button>
-            </div>
+      {/* Diagnostic banner if error */}
+      {audioError && (
+        <div className="mb-2 sm:mb-3 max-w-4xl mx-auto w-full p-2.5 sm:p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-xs text-amber-300 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-[11px] sm:text-xs">{audioError}</span>
           </div>
-        )}
-
-        {/* Embedded player drawer if active */}
-        {isUsingEmbedPlayer && drivePreviewEmbedUrl && (
-          <div className="bg-neutral-900 border-b border-blue-500/30 p-3 max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-1.5 text-xs text-blue-400 font-bold">
-              <span className="flex items-center gap-1.5">
-                <HardDrive className="w-3.5 h-3.5" />
-                Player Embutido do Google Drive
-              </span>
+          <div className="flex items-center gap-1.5">
+            {drivePreviewEmbedUrl && !isUsingEmbedPlayer && (
               <button
-                onClick={() => toggleEmbedPlayer(false)}
-                className="text-neutral-400 hover:text-white text-[11px] underline cursor-pointer"
+                onClick={() => toggleEmbedPlayer(true)}
+                className="px-2.5 py-1 rounded bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition-colors cursor-pointer"
               >
-                Fechar Player Embutido
+                Player Seguro Drive
               </button>
-            </div>
-            <iframe
-              src={drivePreviewEmbedUrl}
-              className="w-full h-32 rounded-lg bg-black border border-neutral-800"
-              allow="autoplay"
-              title="Google Drive Audio Stream"
+            )}
+            {driveDirectWebUrl && (
+              <a
+                href={driveDirectWebUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1 rounded bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-700 text-xs flex items-center gap-1"
+              >
+                <span>Abrir</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+            <button
+              onClick={retryPlayback}
+              className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700 cursor-pointer"
+              title="Recarregar"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Controls Bar in Theater Mode (Mobile Finger Friendly) */}
+      <div className="pt-3 sm:pt-4 border-t border-neutral-800 max-w-4xl mx-auto w-full space-y-2.5 sm:space-y-3 shrink-0">
+        {/* Seeker Slider */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="text-[11px] sm:text-xs font-mono tabular-nums text-neutral-400 w-10 sm:w-12 text-right">
+            {formatTime(currentTime)}
+          </span>
+          <div className="relative flex-1 group py-1">
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={currentTime}
+              onChange={handleSeekChange}
+              className="w-full h-2 sm:h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#E50914]"
             />
           </div>
-        )}
+          <span className="text-[11px] sm:text-xs font-mono tabular-nums text-neutral-400 w-10 sm:w-12">
+            {formatTime(duration)}
+          </span>
+        </div>
 
-        <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto px-4 md:px-8 py-2 md:py-3">
-          {/* Left: Thumbnail & Episode Meta */}
-          <div className="flex items-center gap-3 w-1/4 min-w-[180px]">
-            <div
-              className="relative aspect-video w-14 sm:w-16 rounded overflow-hidden bg-neutral-800 shrink-0 cursor-pointer group"
-              onClick={() => setIsExpanded(true)}
-              title="Expandir modo imersivo"
-            >
-              <img
-                src={currentPlayingEpisode.imageUrl || currentPlayingSeries?.posterImage}
-                alt={currentPlayingEpisode.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-              />
-              <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </div>
-
-            <div className="truncate cursor-pointer" onClick={() => currentPlayingSeries && openSeriesModal(currentPlayingSeries)}>
-              <h4 className="text-xs md:text-sm font-bold text-white truncate hover:underline">
-                {currentPlayingEpisode.title}
-              </h4>
-              <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 truncate">
-                <span className="truncate">{currentPlayingSeries?.title}</span>
-                <span>•</span>
-                <span className="text-amber-300 font-semibold shrink-0">
-                  {currentPlayingEpisode.durationFormatted || `${currentPlayingEpisode.durationMinutes} min`}
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Like Reaction */}
+        {/* Buttons Row */}
+        <div className="flex items-center justify-between">
+          {/* Reactions: Thumbs */}
+          <div className="flex items-center gap-0.5 sm:gap-1">
             {currentPlayingSeries && (
-              <button
-                onClick={() => toggleReaction(currentPlayingSeries.id, 'like')}
-                className={`p-1.5 rounded-full hover:bg-neutral-800 transition-colors hidden sm:block cursor-pointer ${
-                  currentReaction === 'like' || currentReaction === 'double_like'
-                    ? 'text-[#E50914]'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-                title="Gostei"
-              >
-                <ThumbsUp className="w-4 h-4" />
-              </button>
+              <>
+                <button
+                  onClick={() => toggleReaction(currentPlayingSeries.id, 'like')}
+                  className={`p-1.5 sm:p-2 rounded-full transition-colors cursor-pointer active:scale-90 ${
+                    currentReaction === 'like' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
+                  }`}
+                  title="Gostei"
+                >
+                  <ThumbsUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <button
+                  onClick={() => toggleReaction(currentPlayingSeries.id, 'dislike')}
+                  className={`p-1.5 sm:p-2 rounded-full transition-colors cursor-pointer active:scale-90 ${
+                    currentReaction === 'dislike' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
+                  }`}
+                  title="Não é para mim"
+                >
+                  <ThumbsDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </>
             )}
           </div>
 
-          {/* Center: Controls & Seeker */}
-          <div className="flex-1 max-w-2xl flex flex-col items-center">
-            {/* Buttons */}
-            <div className="flex items-center gap-3 md:gap-5 mb-1.5">
-              <button
-                onClick={prevEpisode}
-                className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                title="Episódio Anterior"
-              >
-                <SkipBack className="w-4 h-4" />
-              </button>
+          {/* Central Audio Controls with STOP and PLAY (Optimized spacing for phones) */}
+          <div className="flex items-center gap-1.5 sm:gap-3 md:gap-4">
+            <button
+              onClick={prevEpisode}
+              className="p-1.5 sm:p-2 text-neutral-300 hover:text-white transition-colors cursor-pointer active:scale-90"
+              title="Episódio Anterior"
+            >
+              <SkipBack className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
 
-              <button
-                onClick={() => skipSeconds(-10)}
-                className="p-1 text-neutral-400 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer"
-                title="Voltar 10 segundos"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span className="text-[9px] font-bold">10</span>
-              </button>
+            <button
+              onClick={() => skipSeconds(-10)}
+              className="p-1.5 sm:p-2 text-neutral-300 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer active:scale-90"
+              title="Voltar 10 segundos"
+            >
+              <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="text-[9px] sm:text-[10px] font-bold">10</span>
+            </button>
 
-              <button
-                onClick={togglePlayPause}
-                disabled={audioLoading}
-                className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-transform active:scale-95 shadow-md cursor-pointer disabled:opacity-80"
-                title={isPlaying ? 'Pausar' : 'Reproduzir'}
-              >
-                {audioLoading ? (
-                  <Loader2 className="w-4 h-4 text-black animate-spin" />
-                ) : isPlaying ? (
-                  <Pause className="w-4 h-4 fill-black" />
-                ) : (
-                  <Play className="w-4 h-4 fill-black translate-x-0.5" />
-                )}
-              </button>
+            {/* BOTÃO STOP CENTRAL */}
+            <button
+              onClick={stopAudio}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-neutral-800 hover:bg-neutral-700 hover:border-red-500 border border-neutral-700 text-white flex items-center justify-center transition-all active:scale-90 shadow-md cursor-pointer shrink-0"
+              title="Parar áudio e voltar ao início (Stop)"
+            >
+              <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#E50914] text-[#E50914]" />
+            </button>
 
-              <button
-                onClick={() => skipSeconds(10)}
-                className="p-1 text-neutral-400 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer"
-                title="Avançar 10 segundos"
-              >
-                <RotateCw className="w-4 h-4" />
-                <span className="text-[9px] font-bold">10</span>
-              </button>
+            {/* BOTÃO PLAY / PAUSE (Touch friendly principal) */}
+            <button
+              onClick={togglePlayPause}
+              disabled={audioLoading}
+              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-transform active:scale-90 shadow-xl cursor-pointer disabled:opacity-80 shrink-0"
+              title={isPlaying ? 'Pausar' : 'Reproduzir'}
+            >
+              {audioLoading ? (
+                <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 text-black animate-spin" />
+              ) : isPlaying ? (
+                <Pause className="w-5 h-5 sm:w-6 sm:h-6 fill-black" />
+              ) : (
+                <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-black translate-x-0.5" />
+              )}
+            </button>
 
-              <button
-                onClick={nextEpisode}
-                className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                title="Próximo Episódio"
-              >
-                <SkipForward className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              onClick={() => skipSeconds(10)}
+              className="p-1.5 sm:p-2 text-neutral-300 hover:text-white transition-colors flex items-center gap-0.5 cursor-pointer active:scale-90"
+              title="Avançar 10 segundos"
+            >
+              <RotateCw className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="text-[9px] sm:text-[10px] font-bold">10</span>
+            </button>
 
-            {/* Time seeker bar */}
-            <div className="w-full flex items-center gap-2">
-              <span className="text-[11px] font-mono tabular-nums text-neutral-400 w-10 text-right">
-                {formatTime(currentTime)}
-              </span>
-              <div className="relative flex-1 group">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={handleSeekChange}
-                  className="w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#E50914] group-hover:h-1.5 transition-all"
-                />
-              </div>
-              <span className="text-[11px] font-mono tabular-nums text-neutral-400 w-10">
-                {formatTime(duration)}
-              </span>
-            </div>
+            <button
+              onClick={nextEpisode}
+              className="p-1.5 sm:p-2 text-neutral-300 hover:text-white transition-colors cursor-pointer active:scale-90"
+              title="Próximo Episódio"
+            >
+              <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
           </div>
 
-          {/* Right: Audio Speed, Google Drive Tag, Volume, Fullscreen */}
-          <div className="flex items-center justify-end gap-3 w-1/4 min-w-[160px]">
-            {/* Speed Button */}
+          {/* Speed & Volume */}
+          <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={() => {
                 const nextIdx = (speedOptions.indexOf(playbackRate) + 1) % speedOptions.length;
                 setSpeed(speedOptions[nextIdx]);
               }}
-              className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-bold text-white transition-colors border border-neutral-700 cursor-pointer"
-              title="Velocidade de reprodução"
+              className="px-2 sm:px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] sm:text-xs font-bold text-white transition-colors border border-neutral-700 cursor-pointer active:scale-95"
+              title="Velocidade"
             >
               {playbackRate}x
             </button>
 
-            {/* Drive indicator badge & Toggle */}
-            {audioSourceInfo.isGoogleDrive && drivePreviewEmbedUrl && (
-              <button
-                onClick={() => toggleEmbedPlayer(!isUsingEmbedPlayer)}
-                className={`hidden lg:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                  isUsingEmbedPlayer
-                    ? 'bg-blue-600 text-white border-blue-500'
-                    : 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20'
-                }`}
-                title="Alternar para o Player Oficial do Google Drive"
-              >
-                <HardDrive className="w-3 h-3" />
-                <span>{isUsingEmbedPlayer ? 'Drive Ativo' : 'Drive'}</span>
-              </button>
-            )}
-
-            {/* Volume control */}
-            <div className="hidden sm:flex items-center gap-1.5">
-              <button onClick={toggleMute} className="text-neutral-400 hover:text-white p-1 cursor-pointer">
-                {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            <div className="hidden sm:flex items-center gap-2">
+              <button onClick={toggleMute} className="text-neutral-300 hover:text-white cursor-pointer">
+                {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
               </button>
               <input
                 type="range"
@@ -662,21 +453,12 @@ export const AudioPlayer: React.FC = () => {
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
-                className="w-16 h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#E50914]"
+                className="w-20 h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-[#E50914]"
               />
             </div>
-
-            {/* Maximize theater mode */}
-            <button
-              onClick={() => setIsExpanded(true)}
-              className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              title="Modo tela cheia"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };

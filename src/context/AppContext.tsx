@@ -25,6 +25,8 @@ interface AppContextType {
   audioLoading: boolean;
   drivePreviewEmbedUrl: string | null;
   driveDirectWebUrl: string | null;
+  isPlayerExpanded: boolean;
+  setIsPlayerExpanded: (expanded: boolean) => void;
   selectedSeriesForModal: AudioSeries | null;
   currentView: 'home' | 'series_catalog' | 'my_list' | 'top_rated' | 'admin';
   searchQuery: string;
@@ -35,6 +37,8 @@ interface AppContextType {
   
   // Actions
   playEpisode: (episode: AudioEpisode, series?: AudioSeries) => void;
+  stopAudio: () => void;
+  closePlayerAndGoHome: () => void;
   toggleEmbedPlayer: (useEmbed?: boolean) => void;
   retryPlayback: () => void;
   togglePlayPause: () => void;
@@ -60,6 +64,7 @@ interface AppContextType {
   updateUser: (user: UserProfile) => Promise<void>;
   deleteUser: (userId: string) => void;
   addOrUpdateSeries: (seriesData: AudioSeries) => void;
+  setFeaturedSeries: (seriesId: string) => void;
   deleteSeries: (seriesId: string) => void;
   addOrUpdateEpisode: (episodeData: AudioEpisode) => void;
   deleteEpisode: (episodeId: string) => void;
@@ -187,6 +192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
   const [drivePreviewEmbedUrl, setDrivePreviewEmbedUrl] = useState<string | null>(null);
   const [driveDirectWebUrl, setDriveDirectWebUrl] = useState<string | null>(null);
+  const [isPlayerExpanded, setIsPlayerExpanded] = useState<boolean>(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const candidateUrlsRef = useRef<string[]>([]);
@@ -350,6 +356,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const parentSeries = targetSeries || series.find(s => s.id === episode.seriesId) || null;
     setCurrentPlayingEpisode(episode);
     setCurrentPlayingSeries(parentSeries);
+    setIsPlayerExpanded(true);
 
     const resolved = resolveAudioUrl(episode.audioUrl);
     setAudioSourceInfo({
@@ -421,6 +428,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAudioLoading(false);
       })
       .catch(console.warn);
+  };
+
+  const stopAudio = () => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const closePlayerAndGoHome = () => {
+    stopAudio();
+    setIsPlayerExpanded(false);
+    setCurrentPlayingEpisode(null);
+    setCurrentPlayingSeries(null);
+    setSelectedSeriesForModal(null);
+    setCurrentView('home');
+    setSearchQuery('');
   };
 
   const togglePlayPause = () => {
@@ -693,11 +720,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addOrUpdateSeries = (seriesData: AudioSeries) => {
     setSeries(prev => {
+      let updated: AudioSeries[];
       const exists = prev.some(s => s.id === seriesData.id);
       if (exists) {
-        return prev.map(s => (s.id === seriesData.id ? seriesData : s));
+        updated = prev.map(s => (s.id === seriesData.id ? seriesData : s));
+      } else {
+        updated = [seriesData, ...prev];
       }
-      return [seriesData, ...prev];
+      if (seriesData.featured) {
+        updated = updated.map(s => ({
+          ...s,
+          featured: s.id === seriesData.id,
+        }));
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(updated));
+      } catch (e) {
+        console.warn(e);
+      }
+      return updated;
+    });
+  };
+
+  const setFeaturedSeries = (seriesId: string) => {
+    setSeries(prev => {
+      const updated = prev.map(s => ({
+        ...s,
+        featured: s.id === seriesId,
+      }));
+      try {
+        localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(updated));
+      } catch (err) {
+        console.warn(err);
+      }
+      return updated;
     });
   };
 
@@ -715,18 +771,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addOrUpdateEpisode = (episodeData: AudioEpisode) => {
+    const cleanEpisode: AudioEpisode = {
+      ...episodeData,
+      seriesId: episodeData.seriesId.trim(),
+      id: episodeData.id.trim(),
+    };
     setEpisodes(prev => {
-      const exists = prev.some(e => e.id === episodeData.id);
+      const exists = prev.some(e => e.id.trim() === cleanEpisode.id);
+      let updated: AudioEpisode[];
       if (exists) {
-        return prev.map(e => (e.id === episodeData.id ? episodeData : e));
+        updated = prev.map(e => (e.id.trim() === cleanEpisode.id ? cleanEpisode : e));
+      } else {
+        updated = [...prev, cleanEpisode];
       }
-      return [...prev, episodeData];
+      try {
+        localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Failed to save episodes to localStorage', err);
+      }
+      return updated;
     });
   };
 
   const deleteEpisode = (episodeId: string) => {
-    setEpisodes(prev => prev.filter(e => e.id !== episodeId));
-    if (currentPlayingEpisode?.id === episodeId) {
+    setEpisodes(prev => {
+      const updated = prev.filter(e => e.id.trim() !== episodeId.trim());
+      try {
+        localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Failed to update episodes in localStorage', err);
+      }
+      return updated;
+    });
+    if (currentPlayingEpisode?.id.trim() === episodeId.trim()) {
       setCurrentPlayingEpisode(null);
       setIsPlaying(false);
     }
@@ -778,7 +855,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabaseConfig,
         audioRef,
         isLoggedIn,
+        isPlayerExpanded,
+        setIsPlayerExpanded,
         playEpisode,
+        stopAudio,
+        closePlayerAndGoHome,
         toggleEmbedPlayer,
         retryPlayback,
         togglePlayPause,
@@ -804,6 +885,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUser,
         deleteUser,
         addOrUpdateSeries,
+        setFeaturedSeries,
         deleteSeries,
         addOrUpdateEpisode,
         deleteEpisode,
