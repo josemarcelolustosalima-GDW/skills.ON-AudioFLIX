@@ -59,13 +59,23 @@ export const SeriesDetailModal: React.FC = () => {
     .filter(s => s.id !== series.id && (s.category === series.category || s.tags.some(t => series.tags.includes(t))))
     .slice(0, 3);
 
+  // Dedicated Synopsis audio (Episode 0 or isSynopsis: true)
+  const synopsisEpisode = seriesEpisodes.find(e => e.isSynopsis || Number(e.episodeNumber) === 0)
+    || seriesEpisodes.find(e => e.title.toLowerCase().includes('sinopse') || e.title.toLowerCase().includes('abertura'))
+    || null;
+
+  // Real training episodes (Episódio 1 em diante)
+  const trainingEpisodes = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0);
+
   const handlePlayEpisode = (episode: AudioEpisode) => {
     playEpisode(episode, series);
   };
 
-  // Play opening audio (episode 1) as synopsis with series details
+  // Play opening audio (episode 0 / isSynopsis) as synopsis
   const handlePlaySynopsis = () => {
-    if (seriesEpisodes[0]) {
+    if (synopsisEpisode) {
+      handlePlayEpisode(synopsisEpisode);
+    } else if (seriesEpisodes[0]) {
       handlePlayEpisode(seriesEpisodes[0]);
     }
   };
@@ -132,8 +142,8 @@ export const SeriesDetailModal: React.FC = () => {
               >
                 <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-black" />
                 <span>
-                  {currentPlayingEpisode?.id === seriesEpisodes[0]?.id && isPlaying
-                    ? 'Tocando'
+                  {currentPlayingEpisode?.id === synopsisEpisode?.id && isPlaying
+                    ? 'Tocando Sinopse'
                     : 'Sinopse'}
                 </span>
               </button>
@@ -323,6 +333,7 @@ export const SeriesDetailModal: React.FC = () => {
               ) : (
                 seriesEpisodes.map((episode) => {
                   const isCurrent = currentPlayingEpisode?.id === episode.id;
+                  const isEpSynopsis = Boolean(episode.isSynopsis || Number(episode.episodeNumber) === 0);
                   const progress = currentUser.listenProgress[episode.id];
                   const progressPct = progress
                     ? Math.min(100, (progress.currentTime / progress.duration) * 100)
@@ -335,15 +346,26 @@ export const SeriesDetailModal: React.FC = () => {
                       className={`group flex flex-col md:flex-row items-start md:items-center justify-between p-3 sm:p-4 rounded-lg transition-all cursor-pointer border ${
                         isCurrent
                           ? 'bg-neutral-800/90 border-[#E50914]/80 shadow-md'
+                          : isEpSynopsis
+                          ? 'bg-amber-950/20 hover:bg-amber-950/30 border-amber-500/30 hover:border-amber-500/50'
                           : 'bg-neutral-900/50 hover:bg-neutral-800/70 border-neutral-800/80 hover:border-neutral-700'
                       }`}
                     >
                       {/* Left: Number + Thumbnail + Info */}
                       <div className="flex items-start md:items-center gap-2.5 sm:gap-4 w-full md:w-3/4">
-                        {/* Episode Number */}
-                        <span className="text-base sm:text-xl md:text-2xl font-bold text-neutral-500 group-hover:text-white transition-colors w-6 sm:w-8 text-center shrink-0 pt-1 md:pt-0">
-                          {episode.episodeNumber.toString().padStart(2, '0')}
-                        </span>
+                        {/* Episode Number or INTRO Badge */}
+                        {isEpSynopsis ? (
+                          <div className="flex flex-col items-center justify-center shrink-0 w-8 sm:w-10 pt-1 md:pt-0">
+                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 tracking-wider">
+                              INTRO
+                            </span>
+                            <span className="text-[8px] text-amber-400/80 font-mono font-bold mt-0.5">EP. 0</span>
+                          </div>
+                        ) : (
+                          <span className="text-base sm:text-xl md:text-2xl font-bold text-neutral-500 group-hover:text-white transition-colors w-6 sm:w-8 text-center shrink-0 pt-1 md:pt-0">
+                            {episode.episodeNumber.toString().padStart(2, '0')}
+                          </span>
+                        )}
 
                         {/* Thumbnail with Play Hover */}
                         <div className="relative aspect-video w-24 sm:w-32 md:w-40 rounded overflow-hidden bg-neutral-800 shrink-0 border border-neutral-700/50">
@@ -376,8 +398,18 @@ export const SeriesDetailModal: React.FC = () => {
                         {/* Episode Titles & Synopsis */}
                         <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                            {isEpSynopsis ? (
+                              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 flex items-center gap-1 shrink-0">
+                                <Radio className="w-2.5 h-2.5 text-amber-400" />
+                                <span>Áudio de Sinopse (Abertura)</span>
+                              </span>
+                            ) : (
+                              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-300 bg-neutral-800 px-1.5 py-0.5 rounded border border-neutral-700 shrink-0">
+                                Episódio {episode.episodeNumber}
+                              </span>
+                            )}
                             <h4 className={`text-xs sm:text-sm md:text-base font-bold transition-colors line-clamp-1 ${
-                              isCurrent ? 'text-[#E50914]' : 'text-white group-hover:text-neutral-100'
+                              isCurrent ? 'text-[#E50914]' : isEpSynopsis ? 'text-amber-100' : 'text-white group-hover:text-neutral-100'
                             }`}>
                               {episode.title}
                             </h4>
@@ -406,9 +438,13 @@ export const SeriesDetailModal: React.FC = () => {
                             e.stopPropagation();
                             handlePlayEpisode(episode);
                           }}
-                          className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-[#E50914] text-xs font-bold text-white transition-colors border border-neutral-700 cursor-pointer active:scale-95"
+                          className={`px-3 py-1.5 rounded text-xs font-bold text-white transition-colors border cursor-pointer active:scale-95 ${
+                            isEpSynopsis
+                              ? 'bg-amber-600 hover:bg-amber-500 border-amber-500/50'
+                              : 'bg-neutral-800 hover:bg-[#E50914] border-neutral-700'
+                          }`}
                         >
-                          {isCurrent && isPlaying ? 'Pausar' : 'Ouvir'}
+                          {isCurrent && isPlaying ? 'Pausar' : isEpSynopsis ? 'Ouvir Sinopse' : 'Ouvir'}
                         </button>
                       </div>
                     </div>

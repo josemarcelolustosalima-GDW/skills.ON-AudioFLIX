@@ -20,6 +20,7 @@ import {
   Home,
   Layers,
   Shield,
+  CheckCircle2,
 } from 'lucide-react';
 
 function MainApp() {
@@ -32,6 +33,9 @@ function MainApp() {
     currentUser,
     setCurrentView,
     isLoggedIn,
+    isMobilePreview,
+    syncNotification,
+    clearSyncNotification,
   } = useApp();
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -71,9 +75,37 @@ function MainApp() {
   );
 
   return (
-    <div className="min-h-screen bg-[#141414] text-white flex flex-col selection:bg-[#E50914] selection:text-white">
-      {/* Top Navbar */}
-      <Navbar onOpenAuth={() => setAuthModalOpen(true)} />
+    <div className={isMobilePreview ? "min-h-screen bg-neutral-950 py-3 md:py-6 px-2 flex flex-col items-center justify-center" : "min-h-screen bg-[#141414] text-white flex flex-col font-sans selection:bg-[#E50914] selection:text-white"}>
+      {isMobilePreview && (
+        <div className="hidden md:flex items-center justify-between w-full max-w-[420px] mb-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs font-semibold">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>Simulador Mobile (Smartphone)</span>
+          </span>
+          <span className="text-[11px] text-neutral-400">Padrão 390px</span>
+        </div>
+      )}
+
+      <div className={isMobilePreview ? "w-full max-w-[420px] h-[92vh] max-h-[860px] bg-[#141414] text-white flex flex-col relative rounded-[38px] border-[8px] border-neutral-800 shadow-2xl overflow-y-auto selection:bg-[#E50914] selection:text-white pb-20 ring-1 ring-white/10" : "w-full min-h-screen bg-[#141414] text-white flex flex-col selection:bg-[#E50914] selection:text-white pb-16 md:pb-0"}>
+        {/* Top Navbar */}
+        <Navbar onOpenAuth={() => setAuthModalOpen(true)} />
+
+        {/* Global Sync Notification Toast */}
+        {syncNotification && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] bg-emerald-950/95 border border-emerald-500 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center justify-between gap-3 animate-in slide-in-from-top-4 duration-300 backdrop-blur-md">
+            <div className="flex items-center gap-2.5 text-xs font-semibold">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <span>{syncNotification}</span>
+            </div>
+            <button
+              onClick={clearSyncNotification}
+              className="p-1 rounded hover:bg-emerald-900 text-neutral-300 hover:text-white shrink-0 cursor-pointer"
+              title="Fechar notificação"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
       {/* RENDER VIEW: ADMIN DASHBOARD */}
       {currentView === 'admin' ? (
@@ -315,7 +347,15 @@ function MainApp() {
       </footer>
 
       {/* MOBILE BOTTOM NAVIGATION BAR (Padrão Netflix / Spotify para Smartphones) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-[#121212]/95 backdrop-blur-md border-t border-neutral-800/90 px-2 py-1.5 flex items-center justify-around select-none">
+      <nav
+        className={`fixed bottom-0 ${
+          isMobilePreview
+            ? 'left-1/2 -translate-x-1/2 w-full max-w-[404px] rounded-b-[30px]'
+            : 'left-0 right-0'
+        } z-40 ${
+          isMobilePreview ? 'flex' : 'md:hidden flex'
+        } bg-[#121212]/95 backdrop-blur-md border-t border-neutral-800/90 px-2 py-1.5 items-center justify-around select-none`}
+      >
         <button
           onClick={() => {
             setCurrentView('home');
@@ -388,6 +428,7 @@ function MainApp() {
           </button>
         )}
       </nav>
+      </div>
     </div>
   );
 }

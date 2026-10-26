@@ -20,7 +20,8 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
   const seriesEpisodes = episodes
     .filter(e => e.seriesId.trim().toLowerCase() === series.id.trim().toLowerCase())
     .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
-  const firstEpisode = seriesEpisodes[0];
+  const firstContentEpisode = seriesEpisodes.find(e => !e.isSynopsis && Number(e.episodeNumber) > 0) || seriesEpisodes[0];
+  const trainingEpisodesCount = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0).length;
   const isInMyList = currentUser.myList.includes(series.id);
 
   return (
@@ -67,7 +68,7 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
           <span className="text-neutral-400 hidden xs:inline">{seriesEpisodes.length} Episódios</span>
           <span className="flex items-center gap-1 text-amber-300 font-medium">
             <Clock className="w-3.5 h-3.5" />
-            <span>{series.episodeDurationEstimate || (firstEpisode ? firstEpisode.durationFormatted : '20 min')}</span>
+            <span>{series.episodeDurationEstimate || (firstContentEpisode ? firstContentEpisode.durationFormatted : '20 min')}</span>
           </span>
           <span className="px-1.5 py-0.5 bg-neutral-800/80 border border-neutral-700 rounded text-[10px] sm:text-[11px] text-neutral-300 font-medium hidden sm:inline-block">
             {series.audioQuality}

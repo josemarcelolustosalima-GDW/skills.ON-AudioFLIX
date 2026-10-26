@@ -9,6 +9,7 @@ export interface AudioEpisode {
   durationFormatted: string;
   audioUrl: string; // Google Drive share link or direct audio link
   imageUrl: string; // External image link or generated image
+  isSynopsis?: boolean; // True if this episode is the introduction/synopsis (Episode 0)
   createdAt: string;
 }
 

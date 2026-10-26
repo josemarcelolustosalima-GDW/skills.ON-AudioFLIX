@@ -30,11 +30,20 @@ import {
   AlertTriangle,
   Star,
   Sparkles,
+  Radio,
+  Download,
+  Upload,
+  Share2,
+  Smartphone,
+  Globe,
+  Cloud,
+  FileCode,
 } from 'lucide-react';
 import { AudioSeries, AudioEpisode, UserProfile } from '../types';
 import { SUPABASE_SQL_SCHEMA } from '../data/initialData';
 import { extractGoogleDriveId, analyzeAudioUrl } from '../utils/audioResolver';
 import { decryptPassword, generateSecurePassword } from '../utils/crypto';
+import { generateInitialDataTsCode, downloadCatalogFile } from '../utils/syncManager';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -56,10 +65,26 @@ export const AdminDashboard: React.FC = () => {
     setCurrentView,
     openSeriesModal,
     playEpisode,
+    exportCatalog,
+    importCatalog,
+    generateSyncUrl,
+    testSupabase,
+    pushToSupabaseCloud,
+    pullFromSupabaseCloud,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'supabase'>('analytics');
   const [copiedSql, setCopiedSql] = useState(false);
+  const [syncUrl, setSyncUrl] = useState<string>('');
+  const [copiedSyncUrl, setCopiedSyncUrl] = useState(false);
+  const [copiedSeedCode, setCopiedSeedCode] = useState(false);
+  const [isTestingSupabase, setIsTestingSupabase] = useState(false);
+  const [supabaseTestResult, setSupabaseTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isPushingSupabase, setIsPushingSupabase] = useState(false);
+  const [isPullingSupabase, setIsPullingSupabase] = useState(false);
+  const [jsonImportInput, setJsonImportInput] = useState('');
+  const [showJsonInput, setShowJsonInput] = useState(false);
+  const [importStatus, setImportStatus] = useState<{ success: boolean; message: string } | null>(null);
 
   // Series Form State
   const [editingSeries, setEditingSeries] = useState<Partial<AudioSeries> | null>(null);
@@ -193,14 +218,18 @@ export const AdminDashboard: React.FC = () => {
     const targetEpisodeId = isEdit
       ? editingEpisode.id!.trim()
       : `ep-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const targetSeriesId = editingEpisode.seriesId.trim();
-    const episodeNum = Number(editingEpisode.episodeNumber) || 1;
+    const episodeNum = editingEpisode.episodeNumber !== undefined && editingEpisode.episodeNumber !== null
+      ? Number(editingEpisode.episodeNumber)
+      : 1;
+    const isSynopsis = Boolean(editingEpisode.isSynopsis || episodeNum === 0);
+    const finalEpisodeNum = isSynopsis ? 0 : Math.max(1, episodeNum);
     const durMinutes = Number(editingEpisode.durationMinutes) || 20;
 
     const newEpisode: AudioEpisode = {
       id: targetEpisodeId,
-      seriesId: targetSeriesId,
-      episodeNumber: episodeNum,
+      seriesId: editingEpisode.seriesId.trim(),
+      episodeNumber: finalEpisodeNum,
+      isSynopsis: isSynopsis,
       season: Number(editingEpisode.season) || 1,
       title: editingEpisode.title.trim(),
       synopsis: editingEpisode.synopsis?.trim() || '',
@@ -320,12 +349,12 @@ export const AdminDashboard: React.FC = () => {
           onClick={() => setActiveTab('supabase')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${
             activeTab === 'supabase'
-              ? 'bg-[#E50914] text-white'
+              ? 'bg-[#E50914] text-white shadow-lg'
               : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800'
           }`}
         >
-          <Database className="w-4 h-4" />
-          <span>Supabase & Deploy Netlify</span>
+          <Smartphone className="w-4 h-4 text-amber-400" />
+          <span>Sincronização Mobile & Nuvem</span>
         </button>
       </div>
 
@@ -775,15 +804,22 @@ export const AdminDashboard: React.FC = () => {
                     <button
                       onClick={() => {
                         const existingEps = episodes.filter(e => e.seriesId.trim().toLowerCase() === s.id.trim().toLowerCase());
+                        const regularEps = existingEps.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0);
+                        const hasSynopsis = existingEps.some(e => e.isSynopsis || Number(e.episodeNumber) === 0);
+                        // If series doesn't have synopsis yet, prompt user or default cleanly
+                        const isSyn = !hasSynopsis;
+                        const initialEpNum = isSyn ? 0 : (regularEps.length + 1);
+
                         setEditingEpisode({
                           id: undefined,
                           seriesId: s.id,
-                          episodeNumber: existingEps.length + 1,
+                          episodeNumber: initialEpNum,
+                          isSynopsis: isSyn,
                           season: 1,
-                          title: '',
+                          title: isSyn ? `Sinopse: Introdução a ${s.title}` : '',
                           synopsis: '',
-                          durationMinutes: 20,
-                          durationFormatted: '20 min',
+                          durationMinutes: isSyn ? 6 : 20,
+                          durationFormatted: isSyn ? '6 min' : '20 min',
                           audioUrl: '',
                           imageUrl: s.posterImage || s.heroImage,
                         });
@@ -846,15 +882,21 @@ export const AdminDashboard: React.FC = () => {
                 const targetSeriesId = selectedSeriesFilter !== 'all' ? selectedSeriesFilter : (series[0]?.id || '');
                 const targetSeriesObj = series.find(s => s.id === targetSeriesId) || series[0];
                 const existingEps = episodes.filter(e => e.seriesId.trim().toLowerCase() === targetSeriesId.trim().toLowerCase());
+                const regularEps = existingEps.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0);
+                const hasSynopsis = existingEps.some(e => e.isSynopsis || Number(e.episodeNumber) === 0);
+                const isSyn = !hasSynopsis;
+                const initialEpNum = isSyn ? 0 : (regularEps.length + 1);
+
                 setEditingEpisode({
                   id: undefined,
                   seriesId: targetSeriesId,
-                  episodeNumber: existingEps.length + 1,
+                  episodeNumber: initialEpNum,
+                  isSynopsis: isSyn,
                   season: 1,
-                  title: '',
+                  title: isSyn ? `Sinopse: Introdução a ${targetSeriesObj?.title || 'Série'}` : '',
                   synopsis: '',
-                  durationMinutes: 20,
-                  durationFormatted: '20 min',
+                  durationMinutes: isSyn ? 6 : 20,
+                  durationFormatted: isSyn ? '6 min' : '20 min',
                   audioUrl: '',
                   imageUrl: targetSeriesObj?.posterImage || targetSeriesObj?.heroImage || '',
                 });
@@ -908,8 +950,17 @@ export const AdminDashboard: React.FC = () => {
 
                     return (
                       <tr key={ep.id} className="hover:bg-neutral-800/50 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-neutral-400">
-                          {ep.episodeNumber.toString().padStart(2, '0')}
+                        <td className="py-3 px-4">
+                          {(ep.isSynopsis || Number(ep.episodeNumber) === 0) ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 whitespace-nowrap">
+                              <Radio className="w-3 h-3 text-amber-400" />
+                              SINOPSE (00)
+                            </span>
+                          ) : (
+                            <span className="font-mono font-bold text-neutral-300 bg-neutral-800 px-2 py-0.5 rounded border border-neutral-700 text-xs">
+                              Ep. {ep.episodeNumber.toString().padStart(2, '0')}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
@@ -982,21 +1033,283 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* CONTENT TAB 5: SUPABASE & DEPLOY NETLIFY */}
+      {/* CONTENT TAB 5: MULTI-DEVICE SYNC & CLOUD (MOBILE, NETLIFY & SUPABASE) */}
       {activeTab === 'supabase' && (
-        <div className="py-6 space-y-6 max-w-4xl animate-in fade-in duration-200">
+        <div className="py-6 space-y-6 max-w-4xl animate-in fade-in duration-200 text-white">
           <div className="space-y-1">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Database className="w-5 h-5 text-emerald-400" />
-              <span>Conexão Supabase & Publicação Netlify</span>
+            <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+              <Smartphone className="w-6 h-6 text-[#E50914]" />
+              <span>Sincronização Multi-Dispositivo & Nuvem (Celular / Netlify / Supabase)</span>
             </h2>
             <p className="text-xs text-neutral-400 leading-relaxed">
-              O aplicativo já está configurado com armazenamento persistente em LocalStorage e pronto para conexão direta com o banco relacional PostgreSQL do Supabase e deploy contínuo no Netlify via GitHub.
+              Transfira suas novas séries e episódios criados no computador diretamente para o seu celular ou configure sincronização automática na nuvem para todos os alunos.
             </p>
           </div>
 
+          {/* EXPLANATORY DIAGNOSTIC BANNER */}
+          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-sm text-amber-300">
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+              <span>Por que seu celular abriu a versão com as séries antigas (default)?</span>
+            </div>
+            <p className="text-xs text-neutral-300 leading-relaxed">
+              O <strong>Netlify</strong> é um servidor de arquivos estáticos. Quando você apagou os exemplos e cadastrou sua nova série no seu computador, o aplicativo salvou tudo na <strong>memória local do navegador deste computador (LocalStorage)</strong>. Como o celular possui uma memória isolada e limpa, ao abrir o link ele recorreu aos dados iniciais de demonstração (<em>default</em>).
+            </p>
+            <p className="text-xs text-amber-200/90 font-medium">
+              💡 <strong>Como resolver?</strong> Escolha qualquer uma das 4 opções abaixo para transferir seus dados agora mesmo para o celular ou tornar suas novas séries o padrão oficial definitivo da plataforma.
+            </p>
+          </div>
+
+          {/* OPTION 1: INSTANT MOBILE SYNC LINK */}
+          <div className="bg-gradient-to-r from-neutral-900 via-neutral-900 to-neutral-950 border border-[#E50914]/40 rounded-xl p-5 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#E50914] bg-[#E50914]/10 px-2 py-0.5 rounded border border-[#E50914]/30">
+                  Opção 1 • Mais Rápida (Zero Cadastro)
+                </span>
+                <h3 className="text-base font-bold text-white mt-1 flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-[#E50914]" />
+                  <span>Sincronizar Agora com o Celular via Link Direto</span>
+                </h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Gera um link exclusivo contendo todas as suas séries ({series.length}) e episódios ({episodes.length}).
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  const url = generateSyncUrl();
+                  setSyncUrl(url);
+                }}
+                className="px-4 py-2.5 rounded-lg bg-[#E50914] hover:bg-[#b80710] text-xs font-bold text-white shadow-lg flex items-center gap-2 transition-transform active:scale-95 shrink-0"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>Gerar Link de Sincronização</span>
+              </button>
+            </div>
+
+            {syncUrl && (
+              <div className="p-3.5 bg-black/80 rounded-lg border border-neutral-800 space-y-2.5 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Link gerado com sucesso! Envie para o WhatsApp do seu celular:</span>
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(syncUrl);
+                      setCopiedSyncUrl(true);
+                      setTimeout(() => setCopiedSyncUrl(false), 2500);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-white transition-colors"
+                  >
+                    {copiedSyncUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedSyncUrl ? 'Link Copiado!' : 'Copiar Link'}</span>
+                  </button>
+                </div>
+
+                <div className="p-2.5 bg-neutral-900 rounded font-mono text-[11px] text-neutral-300 break-all select-all max-h-24 overflow-y-auto border border-neutral-800">
+                  {syncUrl}
+                </div>
+
+                <p className="text-[11px] text-neutral-400">
+                  📲 <strong>Como usar no celular:</strong> Copie o link acima, mande para si mesmo no WhatsApp ou e-mail e abra no navegador do seu celular. O aplicativo detectará o link e gravará automaticamente as séries no celular!
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* OPTION 2: FULL JSON BACKUP & RESTORE */}
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
-            <h3 className="text-sm font-bold text-white">Configurar Chaves do Supabase (Opcional)</h3>
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
+                Opção 2 • 100% Confiável Para Qualquer Aparelho
+              </span>
+              <h3 className="text-base font-bold text-white mt-1 flex items-center gap-2">
+                <Download className="w-4 h-4 text-blue-400" />
+                <span>Backup Completo do Catálogo (Exportar & Importar Arquivo)</span>
+              </h3>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                Baixe um arquivo de segurança com todas as suas séries, áudios e usuários cadastrados para restaurar quando quiser no celular ou em outro computador.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              {/* Export Box */}
+              <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Download className="w-4 h-4 text-emerald-400" />
+                    <span>Exportar Catálogo deste Computador</span>
+                  </h4>
+                  <p className="text-[11px] text-neutral-400">
+                    Gera o arquivo <strong>skills_on_catalog.json</strong> contendo {series.length} séries e {episodes.length} episódios.
+                  </p>
+                </div>
+                <button
+                  onClick={exportCatalog}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Baixar Arquivo skills_on_catalog.json</span>
+                </button>
+              </div>
+
+              {/* Import Box */}
+              <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Upload className="w-4 h-4 text-blue-400" />
+                    <span>Importar Catálogo (Neste Aparelho)</span>
+                  </h4>
+                  <p className="text-[11px] text-neutral-400">
+                    Selecione o arquivo de backup exportado para carregar todas as séries no aparelho atual.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-white cursor-pointer border border-neutral-700 transition-colors">
+                    <Upload className="w-4 h-4" />
+                    <span>Selecionar Arquivo .json</span>
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const content = event.target?.result as string;
+                          if (content) {
+                            const res = importCatalog(content);
+                            setImportStatus(res);
+                            setTimeout(() => setImportStatus(null), 5000);
+                          }
+                        };
+                        reader.readAsText(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+
+                  <button
+                    onClick={() => setShowJsonInput(prev => !prev)}
+                    className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white border border-neutral-700 text-xs"
+                    title="Colar texto JSON manualmente"
+                  >
+                    <FileCode className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Manual JSON Paste Area */}
+            {showJsonInput && (
+              <div className="p-3 bg-black/80 rounded-lg border border-neutral-800 space-y-2">
+                <label className="text-[11px] text-neutral-300 font-semibold block">
+                  Colar código JSON do catálogo:
+                </label>
+                <textarea
+                  rows={4}
+                  value={jsonImportInput}
+                  onChange={(e) => setJsonImportInput(e.target.value)}
+                  placeholder='Cole aqui o conteúdo de skills_on_catalog.json...'
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded p-2 text-xs font-mono text-neutral-200 focus:outline-none focus:border-[#E50914]"
+                />
+                <button
+                  onClick={() => {
+                    if (!jsonImportInput.trim()) return;
+                    const res = importCatalog(jsonImportInput);
+                    setImportStatus(res);
+                    if (res.success) {
+                      setJsonImportInput('');
+                      setShowJsonInput(false);
+                    }
+                    setTimeout(() => setImportStatus(null), 5000);
+                  }}
+                  className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors"
+                >
+                  Restaurar Dados a partir do Texto
+                </button>
+              </div>
+            )}
+
+            {importStatus && (
+              <div className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 ${
+                importStatus.success ? 'bg-emerald-950/60 border border-emerald-500 text-emerald-300' : 'bg-red-950/60 border border-red-500 text-red-300'
+              }`}>
+                {importStatus.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                <span>{importStatus.message}</span>
+              </div>
+            )}
+          </div>
+
+          {/* OPTION 3: PERMANENT NETLIFY REPO SEED */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                Opção 3 • Oficial para Todos os Alunos
+              </span>
+              <h3 className="text-base font-bold text-white mt-1 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-amber-400" />
+                <span>Tornar este Catálogo o Padrão Oficial do Netlify</span>
+              </h3>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                Deseja que qualquer pessoa ou aluno no mundo que abra o link do Netlify veja diretamente a sua nova série sem precisar importar nada?
+              </p>
+            </div>
+
+            <div className="p-3 bg-neutral-950 rounded-lg border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <p className="text-xs font-bold text-neutral-200">Arquivo Seed para Repositório / Pasta public</p>
+                <p className="text-[11px] text-neutral-400">
+                  Baixe o catálogo formatado como <strong>public/catalog.json</strong> ou copie o código para <strong>initialData.ts</strong>.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const code = generateInitialDataTsCode(series, episodes);
+                    navigator.clipboard.writeText(code);
+                    setCopiedSeedCode(true);
+                    setTimeout(() => setCopiedSeedCode(false), 2500);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white border border-neutral-700 transition-colors"
+                >
+                  {copiedSeedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedSeedCode ? 'Código Copiado!' : 'Copiar initialData.ts'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    downloadCatalogFile(series, episodes, allUsers, 'catalog.json');
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded bg-amber-600 hover:bg-amber-500 text-xs font-bold text-black transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Baixar catalog.json</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* OPTION 4: REAL SUPABASE CLOUD DATABASE SYNC */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                Opção 4 • Nuvem Profissional em Tempo Real
+              </span>
+              <h3 className="text-base font-bold text-white mt-1 flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-emerald-400" />
+                <span>Sincronização em Nuvem Supabase (PostgreSQL)</span>
+              </h3>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                Conecte um banco de dados gratuito no Supabase para que qualquer alteração feita no PC apareça instantaneamente no celular de todos os alunos em tempo real.
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">Supabase Project URL</label>
@@ -1004,7 +1317,7 @@ export const AdminDashboard: React.FC = () => {
                   type="text"
                   placeholder="https://xyzcompany.supabase.co"
                   value={supabaseConfig.supabaseUrl}
-                  onChange={(e) => updateSupabaseConfig({ supabaseUrl: e.target.value })}
+                  onChange={(e) => updateSupabaseConfig({ supabaseUrl: e.target.value.trim() })}
                   className="w-full bg-neutral-800 text-xs text-white rounded px-3 py-2 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
                 />
               </div>
@@ -1015,46 +1328,102 @@ export const AdminDashboard: React.FC = () => {
                   type="password"
                   placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                   value={supabaseConfig.supabaseAnonKey}
-                  onChange={(e) => updateSupabaseConfig({ supabaseAnonKey: e.target.value })}
+                  onChange={(e) => updateSupabaseConfig({ supabaseAnonKey: e.target.value.trim() })}
                   className="w-full bg-neutral-800 text-xs text-white rounded px-3 py-2 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
-              <span className="text-xs text-neutral-400">
-                Status atual: <span className="text-emerald-400 font-bold">Armazenamento Local Ativo & Sincronizado</span>
-              </span>
-              <button
-                onClick={() => alert('Configurações do Supabase salvas com sucesso!')}
-                className="px-4 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white border border-neutral-700 transition-colors"
-              >
-                Salvar Configurações
-              </button>
-            </div>
-          </div>
+            {/* Supabase Actions Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-neutral-800">
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={supabaseConfig.useLiveSupabase}
+                  onChange={(e) => updateSupabaseConfig({ useLiveSupabase: e.target.checked })}
+                  className="w-4 h-4 rounded text-[#E50914] bg-neutral-800 border-neutral-700 focus:ring-0"
+                />
+                <span>Ativar Sincronização Automática em Nuvem</span>
+              </label>
 
-          {/* SQL Schema Ready to Copy */}
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-white">Script SQL do Supabase para Criação das Tabelas</h3>
-                <p className="text-xs text-neutral-400">
-                  Copie e cole este script diretamente no SQL Editor do seu projeto Supabase:
-                </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  disabled={isTestingSupabase}
+                  onClick={async () => {
+                    if (!supabaseConfig.supabaseUrl || !supabaseConfig.supabaseAnonKey) {
+                      alert('Preencha a URL e a Anon Key do Supabase antes de testar.');
+                      return;
+                    }
+                    setIsTestingSupabase(true);
+                    setSupabaseTestResult(null);
+                    const res = await testSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey);
+                    setIsTestingSupabase(false);
+                    setSupabaseTestResult(res);
+                  }}
+                  className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white border border-neutral-700 transition-colors"
+                >
+                  {isTestingSupabase ? 'Testando...' : 'Testar Conexão'}
+                </button>
+
+                <button
+                  disabled={isPushingSupabase}
+                  onClick={async () => {
+                    setIsPushingSupabase(true);
+                    const res = await pushToSupabaseCloud();
+                    setIsPushingSupabase(false);
+                    alert(res.message);
+                  }}
+                  className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{isPushingSupabase ? 'Enviando...' : 'Enviar Dados deste PC (Upload)'}</span>
+                </button>
+
+                <button
+                  disabled={isPullingSupabase}
+                  onClick={async () => {
+                    setIsPullingSupabase(true);
+                    const res = await pullFromSupabaseCloud();
+                    setIsPullingSupabase(false);
+                    alert(res.message);
+                  }}
+                  className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isPullingSupabase ? 'Baixando...' : 'Puxar da Nuvem (Download)'}</span>
+                </button>
               </div>
-              <button
-                onClick={handleCopySql}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#E50914] hover:bg-[#b80710] text-xs font-bold text-white transition-colors"
-              >
-                {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedSql ? 'Copiado!' : 'Copiar Script SQL'}</span>
-              </button>
             </div>
 
-            <pre className="p-4 bg-black/80 rounded-lg text-xs font-mono text-neutral-300 overflow-x-auto max-h-60 border border-neutral-800">
-              {SUPABASE_SQL_SCHEMA}
-            </pre>
+            {supabaseTestResult && (
+              <div className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 ${
+                supabaseTestResult.ok ? 'bg-emerald-950/60 border border-emerald-500 text-emerald-300' : 'bg-red-950/60 border border-red-500 text-red-300'
+              }`}>
+                {supabaseTestResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                <span>{supabaseTestResult.message}</span>
+              </div>
+            )}
+
+            {/* SQL Script for Supabase */}
+            <div className="pt-2 space-y-2 border-t border-neutral-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-white">Script SQL do Supabase (Criação das Tabelas)</h4>
+                  <p className="text-[11px] text-neutral-400">Copie e execute no SQL Editor do Supabase se estiver criando um novo banco:</p>
+                </div>
+                <button
+                  onClick={handleCopySql}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#E50914] hover:bg-[#b80710] text-xs font-bold text-white transition-colors"
+                >
+                  {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedSql ? 'Copiado!' : 'Copiar Script SQL'}</span>
+                </button>
+              </div>
+
+              <pre className="p-3 bg-black/80 rounded-lg text-[11px] font-mono text-neutral-300 overflow-x-auto max-h-48 border border-neutral-800">
+                {SUPABASE_SQL_SCHEMA}
+              </pre>
+            </div>
           </div>
         </div>
       )}
@@ -1396,15 +1765,117 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-neutral-400 block mb-1">Nº do Episódio *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-neutral-300 font-bold block">Nº do Episódio *</label>
+                    <span className="text-[10px] text-amber-400 font-semibold">
+                      {(editingEpisode?.isSynopsis || Number(editingEpisode?.episodeNumber) === 0)
+                        ? '0 = Sinopse / Abertura'
+                        : 'Episódio ≥ 1'}
+                    </span>
+                  </div>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     required
-                    value={editingEpisode?.episodeNumber || 1}
-                    onChange={(e) => setEditingEpisode(prev => ({ ...prev, episodeNumber: parseInt(e.target.value) || 1 }))}
-                    className="w-full bg-neutral-800 text-white rounded px-3 py-2 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
+                    value={editingEpisode?.episodeNumber ?? 1}
+                    onChange={(e) => {
+                      const rawVal = e.target.value;
+                      const parsed = rawVal === '' ? 0 : parseInt(rawVal, 10);
+                      const isZero = parsed === 0;
+                      setEditingEpisode(prev => ({
+                        ...prev,
+                        episodeNumber: isNaN(parsed) ? 0 : parsed,
+                        isSynopsis: isZero,
+                      }));
+                    }}
+                    className={`w-full text-white rounded px-3 py-2 border font-mono font-bold focus:outline-none ${
+                      (editingEpisode?.isSynopsis || Number(editingEpisode?.episodeNumber) === 0)
+                        ? 'bg-amber-950/40 border-amber-500/60 text-amber-300'
+                        : 'bg-neutral-800 border-neutral-700 focus:border-[#E50914]'
+                    }`}
                   />
+                </div>
+              </div>
+
+              {/* SELETOR INTERATIVO DE FINALIDADE DO ÁUDIO: SINOPSE (EP. 0) VS EPISÓDIO DE TREINAMENTO (EP. 1+) */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-neutral-300 font-bold block text-[11px] uppercase tracking-wider">
+                  Finalidade deste Áudio (Classificação):
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Card 1: Sinopse / Introdução (Episódio 0) */}
+                  <div
+                    onClick={() => {
+                      const sId = editingEpisode?.seriesId;
+                      const sObj = series.find(s => s.id === sId);
+                      setEditingEpisode(prev => ({
+                        ...prev,
+                        isSynopsis: true,
+                        episodeNumber: 0,
+                        title: (!prev?.title || prev?.title === '')
+                          ? `Sinopse: Introdução a ${sObj?.title || 'Série'}`
+                          : prev?.title,
+                        durationMinutes: prev?.durationMinutes && prev.durationMinutes !== 20 ? prev.durationMinutes : 6,
+                        durationFormatted: prev?.durationFormatted && prev.durationFormatted !== '20 min' ? prev.durationFormatted : '6 min',
+                      }));
+                    }}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      (editingEpisode?.isSynopsis || Number(editingEpisode?.episodeNumber) === 0)
+                        ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/50 shadow-md shadow-amber-500/10'
+                        : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:bg-neutral-850'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                        <Radio className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>🎙️ Sinopse / Abertura (Episódio 0)</span>
+                      </div>
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300 border border-amber-500/40 shrink-0">
+                        EP. 0
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-neutral-300 leading-relaxed">
+                      Áudio de abertura com visão geral e introdução da série. É reproduzido quando o usuário clica no botão <strong>Sinopse</strong>. <strong>Não é o Episódio 1</strong>.
+                    </p>
+                  </div>
+
+                  {/* Card 2: Episódio de Treinamento (1, 2, 3...) */}
+                  <div
+                    onClick={() => {
+                      const sId = editingEpisode?.seriesId;
+                      const regularEps = episodes.filter(ep => ep.seriesId.trim().toLowerCase() === sId?.trim().toLowerCase() && Number(ep.episodeNumber) > 0 && !ep.isSynopsis);
+                      const nextEpNum = regularEps.length > 0 ? (regularEps.length + 1) : 1;
+                      const targetNum = (editingEpisode?.episodeNumber && Number(editingEpisode.episodeNumber) > 0)
+                        ? Number(editingEpisode.episodeNumber)
+                        : nextEpNum;
+
+                      setEditingEpisode(prev => ({
+                        ...prev,
+                        isSynopsis: false,
+                        episodeNumber: targetNum,
+                        durationMinutes: prev?.durationMinutes && prev.durationMinutes !== 6 ? prev.durationMinutes : 20,
+                        durationFormatted: prev?.durationFormatted && prev.durationFormatted !== '6 min' ? prev.durationFormatted : '20 min',
+                      }));
+                    }}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      (!editingEpisode?.isSynopsis && Number(editingEpisode?.episodeNumber) > 0)
+                        ? 'bg-[#E50914]/15 border-[#E50914] text-white ring-1 ring-[#E50914]/50 shadow-md shadow-[#E50914]/10'
+                        : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:bg-neutral-850'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                        <Play className="w-3.5 h-3.5 fill-[#E50914] text-[#E50914] shrink-0" />
+                        <span>🎧 Episódio de Treinamento (1, 2, 3...)</span>
+                      </div>
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700 shrink-0">
+                        EP. ≥ 1
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-neutral-300 leading-relaxed">
+                      Aula regular com conteúdo programático. O primeiro áudio de treinamento é verdadeiramente o <strong>Episódio 1</strong>.
+                    </p>
+                  </div>
                 </div>
               </div>
 

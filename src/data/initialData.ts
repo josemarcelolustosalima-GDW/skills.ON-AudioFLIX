@@ -90,6 +90,20 @@ export const INITIAL_SERIES: AudioSeries[] = [
 export const INITIAL_EPISODES: AudioEpisode[] = [
   // High Stakes Leadership
   {
+    id: 'ep-lead-0',
+    seriesId: 'series-leadership',
+    episodeNumber: 0,
+    isSynopsis: true,
+    season: 1,
+    title: 'Sinopse: Introdução ao High Stakes Leadership',
+    synopsis: 'Áudio de abertura oficial onde o mentor David Chen apresenta os objetivos da série, os detalhes de cada módulo e as diretrizes práticas para liderança em cenários de alta pressão.',
+    durationMinutes: 6,
+    durationFormatted: '6 min',
+    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
+    imageUrl: '/src/assets/images/skills_hero_leadership_1792881116508.jpg',
+    createdAt: '2026-01-09T10:00:00Z',
+  },
+  {
     id: 'ep-lead-1',
     seriesId: 'series-leadership',
     episodeNumber: 1,
@@ -144,6 +158,20 @@ export const INITIAL_EPISODES: AudioEpisode[] = [
 
   // Tactical Influence
   {
+    id: 'ep-neg-0',
+    seriesId: 'series-negotiation',
+    episodeNumber: 0,
+    isSynopsis: true,
+    season: 1,
+    title: 'Sinopse: Introdução ao Tactical Influence',
+    synopsis: 'Áudio de abertura com o mentor Arthur Valença detalhando as dinâmicas de negociação corporativa sem concessões destrutivas e o roteiro desta série.',
+    durationMinutes: 5,
+    durationFormatted: '5 min',
+    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
+    imageUrl: '/src/assets/images/skills_series_negotiation_1792881130913.jpg',
+    createdAt: '2026-02-13T14:30:00Z',
+  },
+  {
     id: 'ep-neg-1',
     seriesId: 'series-negotiation',
     episodeNumber: 1,
@@ -185,6 +213,20 @@ export const INITIAL_EPISODES: AudioEpisode[] = [
 
   // Deep Work
   {
+    id: 'ep-prod-0',
+    seriesId: 'series-productivity',
+    episodeNumber: 0,
+    isSynopsis: true,
+    season: 1,
+    title: 'Sinopse: Introdução ao Deep Work Executivo',
+    synopsis: 'Áudio de abertura onde Sofia Montenegro explica a metodologia de foco sustentado na era da dispersão e o cronograma dos episódios de treinamento.',
+    durationMinutes: 6,
+    durationFormatted: '6 min',
+    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
+    imageUrl: '/src/assets/images/skills_series_productivity_1792881131321.jpg',
+    createdAt: '2026-02-28T09:15:00Z',
+  },
+  {
     id: 'ep-prod-1',
     seriesId: 'series-productivity',
     episodeNumber: 1,
@@ -225,6 +267,20 @@ export const INITIAL_EPISODES: AudioEpisode[] = [
   },
 
   // Oratória
+  {
+    id: 'ep-comm-0',
+    seriesId: 'series-communication',
+    episodeNumber: 0,
+    isSynopsis: true,
+    season: 1,
+    title: 'Sinopse: Introdução à Oratória Imersiva',
+    synopsis: 'Áudio de abertura onde Ricardo Fonseca apresenta as técnicas cênicas e vocais que transformarão suas apresentações corporativas em experiências memoráveis.',
+    durationMinutes: 5,
+    durationFormatted: '5 min',
+    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
+    imageUrl: '/src/assets/images/skills_series_communication_1792881130893.jpg',
+    createdAt: '2026-03-19T16:45:00Z',
+  },
   {
     id: 'ep-comm-1',
     seriesId: 'series-communication',

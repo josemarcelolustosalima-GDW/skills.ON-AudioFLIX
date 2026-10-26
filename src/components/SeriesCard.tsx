@@ -24,14 +24,18 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
   const seriesEpisodes = episodes
     .filter(e => e.seriesId.trim().toLowerCase() === series.id.trim().toLowerCase())
     .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
-  const firstEpisode = seriesEpisodes[0];
+  const synopsisEpisode = seriesEpisodes.find(e => e.isSynopsis || Number(e.episodeNumber) === 0);
+  const firstContentEpisode = seriesEpisodes.find(e => !e.isSynopsis && Number(e.episodeNumber) > 0) || seriesEpisodes[0];
+  const trainingEpisodesCount = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0).length;
   const isInMyList = currentUser.myList.includes(series.id);
   const currentReaction = currentUser.reactions[series.id];
 
   const handlePlayFirst = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (firstEpisode) {
-      playEpisode(firstEpisode, series);
+    // Play synopsis first if available, otherwise first episode
+    const toPlay = synopsisEpisode || firstContentEpisode;
+    if (toPlay) {
+      playEpisode(toPlay, series);
     } else {
       openSeriesModal(series);
     }
@@ -78,7 +82,7 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
           </span>
           <span className="px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold bg-black/80 backdrop-blur-xs text-neutral-200 border border-neutral-700 flex items-center gap-1">
             <Clock className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-amber-400" />
-            <span className="truncate max-w-[60px] sm:max-w-none">{series.episodeDurationEstimate || (firstEpisode ? firstEpisode.durationFormatted : '20 min')}</span>
+            <span className="truncate max-w-[60px] sm:max-w-none">{series.episodeDurationEstimate || (firstContentEpisode ? firstContentEpisode.durationFormatted : '20 min')}</span>
           </span>
         </div>
 
@@ -200,10 +204,10 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
             <span className="border border-neutral-600 px-1 rounded text-neutral-300 text-[10px]">
               {series.ratingBadge}
             </span>
-            <span className="text-neutral-400">{seriesEpisodes.length} eps</span>
+            <span className="text-neutral-400">{trainingEpisodesCount || seriesEpisodes.length} eps</span>
             <span className="text-amber-300 flex items-center gap-0.5 font-medium">
               <Clock className="w-2.5 h-2.5" />
-              {series.episodeDurationEstimate || (firstEpisode ? firstEpisode.durationFormatted : '20 min')}
+              {series.episodeDurationEstimate || (firstContentEpisode ? firstContentEpisode.durationFormatted : '20 min')}
             </span>
           </div>
 

@@ -3,6 +3,14 @@ import { AudioSeries, AudioEpisode, UserProfile, ReactionType, SupabaseConfig } 
 import { INITIAL_SERIES, INITIAL_EPISODES, INITIAL_USERS } from '../data/initialData';
 import { resolveAudioUrl } from '../utils/audioResolver';
 import { encryptPassword, decryptPassword } from '../utils/crypto';
+import {
+  decodeCatalogFromUrl,
+  encodeCatalogForUrl,
+  downloadCatalogFile,
+  testSupabaseConnection,
+  pushCatalogToSupabase,
+  pullCatalogFromSupabase,
+} from '../utils/syncManager';
 
 interface AppContextType {
   series: AudioSeries[];
@@ -34,7 +42,19 @@ interface AppContextType {
   supabaseConfig: SupabaseConfig;
   audioRef: React.RefObject<HTMLAudioElement | null>;
   isLoggedIn: boolean;
+  isMobilePreview: boolean;
+  toggleMobilePreview: () => void;
   
+  // Multi-Device Sync & Cloud
+  syncNotification: string | null;
+  clearSyncNotification: () => void;
+  exportCatalog: () => void;
+  importCatalog: (jsonText: string) => { success: boolean; message: string };
+  generateSyncUrl: () => string;
+  testSupabase: (url: string, key: string) => Promise<{ ok: boolean; message: string }>;
+  pushToSupabaseCloud: () => Promise<{ ok: boolean; message: string }>;
+  pullFromSupabaseCloud: () => Promise<{ ok: boolean; message: string }>;
+
   // Actions
   playEpisode: (episode: AudioEpisode, series?: AudioSeries) => void;
   stopAudio: () => void;
@@ -95,11 +115,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [episodes, setEpisodes] = useState<AudioEpisode[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_EPISODES);
-      return saved ? JSON.parse(saved) : INITIAL_EPISODES;
+      if (saved) {
+        let loaded: AudioEpisode[] = JSON.parse(saved);
+        const savedSeriesRaw = localStorage.getItem(STORAGE_KEY_SERIES);
+        const currentSeriesList: AudioSeries[] = savedSeriesRaw ? JSON.parse(savedSeriesRaw) : INITIAL_SERIES;
+        const currentSeriesIds = new Set(currentSeriesList.map(s => s.id.trim().toLowerCase()));
+
+        // Ensure initial synopsis audios (episode 0) are present only for series that actually exist in catalog
+        const missingZeros = INITIAL_EPISODES.filter(
+          ie => (ie.episodeNumber === 0 || ie.isSynopsis) &&
+            currentSeriesIds.has(ie.seriesId.trim().toLowerCase()) &&
+            !loaded.some(le => le.seriesId.trim().toLowerCase() === ie.seriesId.trim().toLowerCase() && (le.episodeNumber === 0 || le.isSynopsis))
+        );
+        if (missingZeros.length > 0) {
+          loaded = [...missingZeros, ...loaded];
+          localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(loaded));
+        }
+        return loaded;
+      }
+      return INITIAL_EPISODES;
     } catch {
       return INITIAL_EPISODES;
     }
   });
+
+  const [syncNotification, setSyncNotification] = useState<string | null>(null);
+  const clearSyncNotification = () => setSyncNotification(null);
 
   const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
     try {
@@ -193,6 +234,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [drivePreviewEmbedUrl, setDrivePreviewEmbedUrl] = useState<string | null>(null);
   const [driveDirectWebUrl, setDriveDirectWebUrl] = useState<string | null>(null);
   const [isPlayerExpanded, setIsPlayerExpanded] = useState<boolean>(false);
+  const [isMobilePreview, setIsMobilePreview] = useState<boolean>(false);
+  const toggleMobilePreview = () => setIsMobilePreview(prev => !prev);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const candidateUrlsRef = useRef<string[]>([]);
@@ -250,6 +293,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Failed to save supabase config', e);
     }
   }, [supabaseConfig]);
+
+  // 1. Startup Effect: Check URL for sync data (?sync=... or #sync=...)
+  useEffect(() => {
+    try {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      let syncPayload: string | null = null;
+
+      if (hash.startsWith('#sync=')) {
+        syncPayload = hash.substring(6);
+      } else {
+        const params = new URLSearchParams(search);
+        if (params.get('sync')) {
+          syncPayload = params.get('sync');
+        }
+      }
+
+      if (syncPayload) {
+        const decoded = decodeCatalogFromUrl(syncPayload);
+        if (decoded && Array.isArray(decoded.series) && Array.isArray(decoded.episodes)) {
+          setSeries(decoded.series);
+          setEpisodes(decoded.episodes);
+          if (Array.isArray(decoded.users) && decoded.users.length > 0) {
+            setAllUsers(decoded.users);
+            localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(decoded.users));
+          }
+          localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(decoded.series));
+          localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(decoded.episodes));
+          window.history.replaceState(null, '', window.location.pathname);
+          setSyncNotification(`🎉 Sincronização Concluída! ${decoded.series.length} séries e ${decoded.episodes.length} episódios importados com sucesso para este dispositivo!`);
+        }
+      }
+    } catch (e) {
+      console.warn('Sync URL check error', e);
+    }
+  }, []);
+
+  // 2. Startup Effect: Check for public /catalog.json if local storage is clean (new device/clean browser)
+  useEffect(() => {
+    try {
+      const savedSeries = localStorage.getItem(STORAGE_KEY_SERIES);
+      if (!savedSeries) {
+        fetch('/catalog.json')
+          .then(res => (res.ok ? res.json() : null))
+          .then(data => {
+            if (data && Array.isArray(data.series) && data.series.length > 0) {
+              setSeries(data.series);
+              localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(data.series));
+              if (Array.isArray(data.episodes) && data.episodes.length > 0) {
+                setEpisodes(data.episodes);
+                localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(data.episodes));
+              }
+              if (Array.isArray(data.users) && data.users.length > 0) {
+                setAllUsers(data.users);
+                localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(data.users));
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
+  }, []);
+
+  // 3. Startup Effect: Pull from Supabase if configured and active
+  useEffect(() => {
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      pullCatalogFromSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey)
+        .then(res => {
+          if (res.ok && res.series && res.episodes) {
+            setSeries(res.series);
+            setEpisodes(res.episodes);
+            localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(res.series));
+            localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(res.episodes));
+            setSupabaseConfig(prev => ({ ...prev, status: 'connected', errorMessage: undefined }));
+          }
+        })
+        .catch(err => {
+          console.warn('Supabase initial pull error:', err);
+        });
+    }
+  }, [supabaseConfig.useLiveSupabase, supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey]);
 
   // Audio element events binding with smart failover
   useEffect(() => {
@@ -501,7 +625,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const nextEpisode = () => {
     if (!currentPlayingEpisode) return;
-    const seriesEpisodes = episodes.filter(e => e.seriesId === currentPlayingEpisode.seriesId);
+    const seriesEpisodes = episodes
+      .filter(e => e.seriesId.trim().toLowerCase() === currentPlayingEpisode.seriesId.trim().toLowerCase())
+      .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
     const currentIndex = seriesEpisodes.findIndex(e => e.id === currentPlayingEpisode.id);
     if (currentIndex >= 0 && currentIndex < seriesEpisodes.length - 1) {
       playEpisode(seriesEpisodes[currentIndex + 1], currentPlayingSeries || undefined);
@@ -510,7 +636,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const prevEpisode = () => {
     if (!currentPlayingEpisode) return;
-    const seriesEpisodes = episodes.filter(e => e.seriesId === currentPlayingEpisode.seriesId);
+    const seriesEpisodes = episodes
+      .filter(e => e.seriesId.trim().toLowerCase() === currentPlayingEpisode.seriesId.trim().toLowerCase())
+      .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
     const currentIndex = seriesEpisodes.findIndex(e => e.id === currentPlayingEpisode.id);
     if (currentIndex > 0) {
       playEpisode(seriesEpisodes[currentIndex - 1], currentPlayingSeries || undefined);
@@ -809,6 +937,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const exportCatalog = () => {
+    downloadCatalogFile(series, episodes, allUsers);
+  };
+
+  const importCatalog = (jsonText: string): { success: boolean; message: string } => {
+    try {
+      const data = JSON.parse(jsonText);
+      const parsedSeries: AudioSeries[] = Array.isArray(data.series) ? data.series : (Array.isArray(data) ? data : []);
+      const parsedEpisodes: AudioEpisode[] = Array.isArray(data.episodes) ? data.episodes : [];
+      const parsedUsers: UserProfile[] = Array.isArray(data.users) ? data.users : [];
+
+      if (parsedSeries.length === 0 && parsedEpisodes.length === 0) {
+        return { success: false, message: 'Nenhuma série ou episódio válido encontrado no arquivo JSON.' };
+      }
+
+      if (parsedSeries.length > 0) {
+        setSeries(parsedSeries);
+        localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(parsedSeries));
+      }
+      if (parsedEpisodes.length > 0) {
+        setEpisodes(parsedEpisodes);
+        localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(parsedEpisodes));
+      }
+      if (parsedUsers.length > 0) {
+        setAllUsers(parsedUsers);
+        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(parsedUsers));
+      }
+
+      setSyncNotification(`✅ Catálogo importado com sucesso! (${parsedSeries.length} séries, ${parsedEpisodes.length} episódios)`);
+      return {
+        success: true,
+        message: `Sucesso: ${parsedSeries.length} séries e ${parsedEpisodes.length} episódios importados!`,
+      };
+    } catch (e: any) {
+      return { success: false, message: `Erro ao processar arquivo JSON: ${e?.message || 'Formato inválido'}` };
+    }
+  };
+
+  const generateSyncUrl = (): string => {
+    const encoded = encodeCatalogForUrl(series, episodes, allUsers);
+    const origin = window.location.origin + window.location.pathname;
+    return `${origin}#sync=${encoded}`;
+  };
+
+  const testSupabase = async (url: string, key: string) => {
+    return await testSupabaseConnection(url, key);
+  };
+
+  const pushToSupabaseCloud = async () => {
+    if (!supabaseConfig.supabaseUrl || !supabaseConfig.supabaseAnonKey) {
+      return { ok: false, message: 'Configure a URL e Chave Anon do Supabase primeiro.' };
+    }
+    const res = await pushCatalogToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, series, episodes);
+    if (res.ok) {
+      setSupabaseConfig(prev => ({ ...prev, status: 'connected', errorMessage: undefined }));
+      setSyncNotification('☁️ Catálogo enviado e sincronizado com o Supabase com sucesso!');
+    } else {
+      setSupabaseConfig(prev => ({ ...prev, status: 'error', errorMessage: res.message }));
+    }
+    return res;
+  };
+
+  const pullFromSupabaseCloud = async () => {
+    if (!supabaseConfig.supabaseUrl || !supabaseConfig.supabaseAnonKey) {
+      return { ok: false, message: 'Configure a URL e Chave Anon do Supabase primeiro.' };
+    }
+    const res = await pullCatalogFromSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey);
+    if (res.ok && res.series && res.episodes) {
+      setSeries(res.series);
+      setEpisodes(res.episodes);
+      localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(res.series));
+      localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(res.episodes));
+      setSupabaseConfig(prev => ({ ...prev, status: 'connected', errorMessage: undefined }));
+      setSyncNotification(`☁️ Sincronizado do Supabase! ${res.series.length} séries e ${res.episodes.length} episódios atualizados.`);
+    } else {
+      setSupabaseConfig(prev => ({ ...prev, status: 'error', errorMessage: res.message }));
+    }
+    return { ok: res.ok, message: res.message };
+  };
+
   const updateSupabaseConfig = (config: Partial<SupabaseConfig>) => {
     setSupabaseConfig(prev => ({ ...prev, ...config }));
   };
@@ -855,8 +1063,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabaseConfig,
         audioRef,
         isLoggedIn,
+        isMobilePreview,
+        toggleMobilePreview,
         isPlayerExpanded,
         setIsPlayerExpanded,
+        syncNotification,
+        clearSyncNotification,
+        exportCatalog,
+        importCatalog,
+        generateSyncUrl,
+        testSupabase,
+        pushToSupabaseCloud,
+        pullFromSupabaseCloud,
         playEpisode,
         stopAudio,
         closePlayerAndGoHome,

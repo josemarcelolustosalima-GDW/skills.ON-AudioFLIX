@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Loader2,
   Tv,
+  Radio,
 } from 'lucide-react';
 import { formatTime } from '../utils/audioResolver';
 
@@ -203,13 +204,26 @@ export const AudioPlayer: React.FC = () => {
 
         {/* Info and Details */}
         <div className="flex-1 space-y-2 sm:space-y-4 text-center md:text-left w-full min-w-0">
-          {currentPlayingSeries && (
-            <div className="flex items-center justify-center md:justify-start gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#E50914]">
-              <span className="truncate max-w-[140px] sm:max-w-none">{currentPlayingSeries.category}</span>
-              <span className="text-neutral-500">•</span>
-              <span>{currentPlayingSeries.audioQuality}</span>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
+            {(currentPlayingEpisode.isSynopsis || Number(currentPlayingEpisode.episodeNumber) === 0) ? (
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-extrabold flex items-center gap-1">
+                <Radio className="w-3 h-3 text-amber-400" />
+                ÁUDIO DE SINOPSE (ABERTURA • EPISÓDIO 0)
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded bg-[#E50914]/20 text-[#E50914] border border-[#E50914]/40 font-extrabold">
+                EPISÓDIO {currentPlayingEpisode.episodeNumber}
+              </span>
+            )}
+            {currentPlayingSeries && (
+              <>
+                <span className="text-neutral-500">•</span>
+                <span className="text-neutral-300 truncate max-w-[140px] sm:max-w-none">{currentPlayingSeries.category}</span>
+                <span className="text-neutral-500">•</span>
+                <span className="text-neutral-400">{currentPlayingSeries.audioQuality}</span>
+              </>
+            )}
+          </div>
 
           <h2 className="text-xl sm:text-2xl md:text-4xl font-extrabold text-white tracking-tight line-clamp-2">
             {currentPlayingEpisode.title}
@@ -270,7 +284,9 @@ export const AudioPlayer: React.FC = () => {
                 }`}
               >
                 <span className="truncate mr-2">
-                  Ep. {ep.episodeNumber}: {ep.title}
+                  {(ep.isSynopsis || Number(ep.episodeNumber) === 0)
+                    ? `Sinopse: ${ep.title}`
+                    : `Ep. ${ep.episodeNumber}: ${ep.title}`}
                 </span>
                 <span className="text-neutral-500 shrink-0 text-[11px]">{ep.durationFormatted}</span>
               </button>

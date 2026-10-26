@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Shield, LogOut } from 'lucide-react';
+import { Search, Shield, LogOut, Smartphone, Monitor } from 'lucide-react';
 
 interface NavbarProps {
   onOpenAuth: () => void;
@@ -15,6 +15,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth }) => {
     setSearchQuery,
     logout,
     isLoggedIn,
+    isMobilePreview,
+    toggleMobilePreview,
   } = useApp();
 
   const [isScrolled, setIsScrolled] = useState(false);
@@ -152,6 +154,29 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth }) => {
             </button>
           )}
         </div>
+
+        {/* Toggle Mobile Preview Simulator (Helps users testing on desktop see mobile experience immediately) */}
+        <button
+          onClick={toggleMobilePreview}
+          className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-semibold transition-all border cursor-pointer ${
+            isMobilePreview
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md'
+              : 'bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300 border-neutral-700'
+          }`}
+          title={isMobilePreview ? 'Voltar para visão desktop padrão' : 'Testar e simular a visão em Smartphone / Celular'}
+        >
+          {isMobilePreview ? (
+            <>
+              <Monitor className="w-3.5 h-3.5 text-amber-400" />
+              <span>Visão Desktop</span>
+            </>
+          ) : (
+            <>
+              <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+              <span>Simular Celular</span>
+            </>
+          )}
+        </button>
 
         {/* Admin Dashboard Button: EXCLUSIVELY AVAILABLE FOR ADMIN LOGIN */}
         {currentUser.role === 'admin' && (
