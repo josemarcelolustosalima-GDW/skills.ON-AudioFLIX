@@ -42,32 +42,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth }) => {
           : 'bg-gradient-to-b from-black/90 via-black/40 to-transparent'
       }`}
     >
-      {/* Left: Original skills.ON! Logo & Navigation */}
-      <div className="flex items-center gap-8">
-        <button
-          onClick={() => {
-            setCurrentView('home');
-            setSearchQuery('');
-          }}
-          className="flex items-center gap-2 focus:outline-none group text-left py-1"
-          title="skills.ON! Educação Executiva"
-        >
-          {/* Official Original Logo Attachment */}
-          <img
-            src="/assets/aistudio/skills_ON_BRANCO_transparente_a2b697f4.png"
-            alt="skills.ON! Educação Executiva"
-            className="h-6 sm:h-7 md:h-8 w-auto object-contain group-hover:scale-102 transition-transform duration-200"
-          />
-        </button>
-
-        {/* Netflix Desktop Navigation Links (Always Accessible to Student & Admin) */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+      {/* Left: Navigation Links */}
+      <div className="flex items-center gap-4 lg:gap-8">
+        {/* Navigation Links */}
+        <nav className="flex items-center gap-4 sm:gap-6 text-xs sm:text-sm font-medium">
           <button
             onClick={() => {
               setCurrentView('home');
               setSearchQuery('');
             }}
-            className={`transition-colors whitespace-nowrap ${
+            className={`transition-colors whitespace-nowrap cursor-pointer ${
               currentView === 'home' && !searchQuery
                 ? 'text-white font-bold'
                 : 'text-neutral-400 hover:text-neutral-200'
@@ -80,20 +64,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth }) => {
               setCurrentView('series_catalog');
               setSearchQuery('');
             }}
-            className={`transition-colors whitespace-nowrap ${
+            className={`transition-colors whitespace-nowrap cursor-pointer ${
               currentView === 'series_catalog'
                 ? 'text-white font-bold'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            Séries de Treinamento
+            <span className="hidden sm:inline">Séries de Treinamento</span>
+            <span className="sm:hidden">Séries</span>
           </button>
           <button
             onClick={() => {
               setCurrentView('top_rated');
               setSearchQuery('');
             }}
-            className={`transition-colors whitespace-nowrap ${
+            className={`hidden sm:inline-block transition-colors whitespace-nowrap cursor-pointer ${
               currentView === 'top_rated'
                 ? 'text-white font-bold'
                 : 'text-neutral-400 hover:text-neutral-200'
@@ -106,7 +91,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth }) => {
               setCurrentView('my_list');
               setSearchQuery('');
             }}
-            className={`transition-colors whitespace-nowrap ${
+            className={`hidden sm:inline-block transition-colors whitespace-nowrap cursor-pointer ${
               currentView === 'my_list'
                 ? 'text-white font-bold'
                 : 'text-neutral-400 hover:text-neutral-200'

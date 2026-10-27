@@ -121,13 +121,14 @@ export async function testSupabaseConnection(supabaseUrl: string, supabaseKey: s
 }
 
 /**
- * Push local series and episodes to Supabase tables.
+ * Push local series, episodes, and users to Supabase tables.
  */
 export async function pushCatalogToSupabase(
   supabaseUrl: string,
   supabaseKey: string,
   series: AudioSeries[],
-  episodes: AudioEpisode[]
+  episodes: AudioEpisode[],
+  users?: UserProfile[]
 ): Promise<{ ok: boolean; message: string }> {
   try {
     const cleanUrl = supabaseUrl.replace(/\/+$/, '');
@@ -210,19 +211,57 @@ export async function pushCatalogToSupabase(
       throw new Error(`Falha ao sincronizar episódios: ${err}`);
     }
 
-    return { ok: true, message: `Sincronizado com sucesso! ${series.length} séries e ${episodes.length} episódios enviados para o Supabase.` };
+    // 3. Format and Upsert Users (if provided)
+    let usersCount = 0;
+    if (users && users.length > 0) {
+      const userRows = users.map(u => ({
+        id: u.id,
+        name: u.name,
+        login: u.login.trim().toLowerCase(),
+        password: u.password,
+        email: u.email || `${u.login}@skillson.com`,
+        role: u.role || 'user',
+        avatar: u.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+        my_list: u.myList || [],
+        reactions: u.reactions || {},
+        listen_progress: u.listenProgress || {},
+        created_at: u.createdAt || new Date().toISOString(),
+      }));
+
+      const resUsers = await fetch(`${cleanUrl}/rest/v1/users`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(userRows),
+      });
+
+      if (resUsers.ok) {
+        usersCount = users.length;
+      } else {
+        console.warn('Notice: Users table might not exist yet in Supabase or had an issue. Execute updated SQL schema if needed.');
+      }
+    }
+
+    return {
+      ok: true,
+      message: `Sincronizado com sucesso! ${series.length} séries, ${episodes.length} episódios${usersCount > 0 ? ` e ${usersCount} usuários` : ''} enviados para o Supabase.`
+    };
   } catch (err: any) {
     return { ok: false, message: err?.message || 'Erro ao sincronizar com Supabase' };
   }
 }
 
 /**
- * Fetch series and episodes from Supabase tables.
+ * Fetch series, episodes, and users from Supabase tables.
  */
 export async function pullCatalogFromSupabase(
   supabaseUrl: string,
   supabaseKey: string
-): Promise<{ ok: boolean; message: string; series?: AudioSeries[]; episodes?: AudioEpisode[] }> {
+): Promise<{ ok: boolean; message: string; series?: AudioSeries[]; episodes?: AudioEpisode[]; users?: UserProfile[] }> {
   try {
     const cleanUrl = supabaseUrl.replace(/\/+$/, '');
 
@@ -289,11 +328,41 @@ export async function pullCatalogFromSupabase(
       createdAt: e.created_at || new Date().toISOString(),
     }));
 
+    // Fetch Users (if table exists)
+    let mappedUsers: UserProfile[] | undefined = undefined;
+    try {
+      const resUsers = await fetch(`${cleanUrl}/rest/v1/users?select=*&order=created_at.asc`, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+      });
+      if (resUsers.ok) {
+        const rawUsers: any[] = await resUsers.json();
+        mappedUsers = rawUsers.map(r => ({
+          id: r.id,
+          name: r.name,
+          login: r.login,
+          password: r.password,
+          email: r.email || `${r.login}@skillson.com`,
+          role: r.role as 'admin' | 'user',
+          avatar: r.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+          myList: Array.isArray(r.my_list) ? r.my_list : [],
+          reactions: (r.reactions && typeof r.reactions === 'object') ? r.reactions : {},
+          listenProgress: (r.listen_progress && typeof r.listen_progress === 'object') ? r.listen_progress : {},
+          createdAt: r.created_at || new Date().toISOString(),
+        }));
+      }
+    } catch {
+      // Table might not exist yet, ignore
+    }
+
     return {
       ok: true,
-      message: `${mappedSeries.length} séries e ${mappedEpisodes.length} episódios carregados do Supabase!`,
+      message: `${mappedSeries.length} séries, ${mappedEpisodes.length} episódios${mappedUsers ? ` e ${mappedUsers.length} usuários` : ''} carregados do Supabase!`,
       series: mappedSeries,
       episodes: mappedEpisodes,
+      users: mappedUsers,
     };
   } catch (err: any) {
     return { ok: false, message: err?.message || 'Erro ao baixar dados do Supabase' };
@@ -432,5 +501,198 @@ export async function deleteSeriesFromSupabase(
   } catch (err) {
     console.warn('Real-time series delete error:', err);
     return false;
+  }
+}
+
+/**
+ * Upsert a single user to Supabase in real time
+ */
+export async function pushSingleUserToSupabase(
+  supabaseUrl: string,
+  supabaseKey: string,
+  u: UserProfile
+): Promise<boolean> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const row = {
+      id: u.id,
+      name: u.name,
+      login: u.login.trim().toLowerCase(),
+      password: u.password,
+      email: u.email || `${u.login}@skillson.com`,
+      role: u.role || 'user',
+      avatar: u.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+      my_list: u.myList || [],
+      reactions: u.reactions || {},
+      listen_progress: u.listenProgress || {},
+      created_at: u.createdAt || new Date().toISOString(),
+    };
+    const res = await fetch(`${cleanUrl}/rest/v1/users`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(row),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Real-time user push error:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete a single user from Supabase in real time
+ */
+export async function deleteUserFromSupabase(
+  supabaseUrl: string,
+  supabaseKey: string,
+  userId: string
+): Promise<boolean> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const res = await fetch(`${cleanUrl}/rest/v1/users?id=eq.${encodeURIComponent(userId.trim())}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Real-time user delete error:', err);
+    return false;
+  }
+}
+
+/**
+ * Fetch all users from Supabase
+ */
+export async function pullUsersFromSupabase(
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<{ ok: boolean; users?: UserProfile[]; message: string }> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const res = await fetch(`${cleanUrl}/rest/v1/users?select=*&order=created_at.asc`, {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error('Falha ao buscar usuários do Supabase');
+    }
+
+    const rows: any[] = await res.json();
+    const mapped: UserProfile[] = rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      login: r.login,
+      password: r.password,
+      email: r.email || `${r.login}@skillson.com`,
+      role: r.role as 'admin' | 'user',
+      avatar: r.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+      myList: Array.isArray(r.my_list) ? r.my_list : [],
+      reactions: (r.reactions && typeof r.reactions === 'object') ? r.reactions : {},
+      listenProgress: (r.listen_progress && typeof r.listen_progress === 'object') ? r.listen_progress : {},
+      createdAt: r.created_at || new Date().toISOString(),
+    }));
+
+    return { ok: true, users: mapped, message: `${mapped.length} usuários carregados do Supabase.` };
+  } catch (err: any) {
+    return { ok: false, message: err?.message || 'Erro ao carregar usuários' };
+  }
+}
+
+/**
+ * Push all users to Supabase in bulk
+ */
+export async function pushAllUsersToSupabase(
+  supabaseUrl: string,
+  supabaseKey: string,
+  users: UserProfile[]
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const rows = users.map(u => ({
+      id: u.id,
+      name: u.name,
+      login: u.login.trim().toLowerCase(),
+      password: u.password,
+      email: u.email || `${u.login}@skillson.com`,
+      role: u.role || 'user',
+      avatar: u.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+      my_list: u.myList || [],
+      reactions: u.reactions || {},
+      listen_progress: u.listenProgress || {},
+      created_at: u.createdAt || new Date().toISOString(),
+    }));
+
+    const res = await fetch(`${cleanUrl}/rest/v1/users`, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(rows),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Falha ao sincronizar usuários: ${err}`);
+    }
+
+    return { ok: true, message: `${users.length} usuários sincronizados com o Supabase com sucesso!` };
+  } catch (err: any) {
+    return { ok: false, message: err?.message || 'Erro ao enviar usuários para o Supabase' };
+  }
+}
+
+/**
+ * Fetch a single user by login directly from Supabase (for real-time multi-device login)
+ */
+export async function fetchUserByLoginFromSupabase(
+  supabaseUrl: string,
+  supabaseKey: string,
+  login: string
+): Promise<UserProfile | null> {
+  try {
+    const cleanUrl = supabaseUrl.replace(/\/+$/, '');
+    const cleanLogin = login.trim().toLowerCase();
+    const res = await fetch(`${cleanUrl}/rest/v1/users?login=eq.${encodeURIComponent(cleanLogin)}&limit=1`, {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+    });
+
+    if (!res.ok) return null;
+    const rows: any[] = await res.json();
+    if (!rows || rows.length === 0) return null;
+
+    const r = rows[0];
+    return {
+      id: r.id,
+      name: r.name,
+      login: r.login,
+      password: r.password,
+      email: r.email || `${r.login}@skillson.com`,
+      role: r.role as 'admin' | 'user',
+      avatar: r.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+      myList: Array.isArray(r.my_list) ? r.my_list : [],
+      reactions: (r.reactions && typeof r.reactions === 'object') ? r.reactions : {},
+      listenProgress: (r.listen_progress && typeof r.listen_progress === 'object') ? r.listen_progress : {},
+      createdAt: r.created_at || new Date().toISOString(),
+    };
+  } catch (err) {
+    console.warn('Fetch user by login error:', err);
+    return null;
   }
 }

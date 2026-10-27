@@ -59,13 +59,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
         {/* Brand Header with Original Logo */}
         <div className="text-center mb-6">
-          <div className="flex justify-center mb-3">
             <img
-              src="/assets/aistudio/skills_ON_BRANCO_transparente_a2b697f4.png"
-              alt="skills.ON! Educação Executiva"
-              className="h-9 sm:h-11 object-contain"
+              src="/assets/aistudio/audio_skills_logo_new.jpeg"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'https://i.imgur.com/LyJxYFP.jpeg';
+              }}
+              alt="AUDIO SKILLS por skills.ON!"
+              className="h-11 sm:h-12 object-contain rounded-md mx-auto mb-3"
             />
-          </div>
           <h2 className="text-lg font-bold text-white tracking-tight">Entrar na Plataforma</h2>
           <p className="text-xs text-neutral-400 mt-0.5">
             Áudio Séries de Treinamento e Educação Executiva

@@ -418,11 +418,27 @@ create table if not exists public.user_reactions (
   unique(user_id, series_id)
 );
 
--- 4. Permissões de Leitura e Gravação (RLS)
+-- 4. Tabela de Alunos e Usuários (Sincronização Multi-Dispositivo)
+create table if not exists public.users (
+  id text primary key,
+  name text not null,
+  login text unique not null,
+  password text not null,
+  email text,
+  role text default 'user',
+  avatar text default '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+  my_list text[] default '{}',
+  reactions jsonb default '{}'::jsonb,
+  listen_progress jsonb default '{}'::jsonb,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 5. Permissões de Leitura e Gravação (RLS)
 -- Liberar Leitura, Inserção, Atualização e Exclusão para sincronização direta do aplicativo:
 alter table public.series disable row level security;
 alter table public.episodes disable row level security;
 alter table public.user_reactions disable row level security;
+alter table public.users disable row level security;
 
 -- Políticas de segurança permissivas (caso o RLS permaneça ativado):
 drop policy if exists "Allow public read series" on public.series;
@@ -437,14 +453,32 @@ drop policy if exists "Allow public read reactions" on public.user_reactions;
 drop policy if exists "Allow authenticated insert reactions" on public.user_reactions;
 drop policy if exists "Allow all on reactions" on public.user_reactions;
 create policy "Allow all on reactions" on public.user_reactions for all using (true) with check (true);
+
+drop policy if exists "Allow all on users" on public.users;
+create policy "Allow all on users" on public.users for all using (true) with check (true);
 `;
 
-export const SUPABASE_RLS_FIX_SQL = `-- Correção Rápida de Permissão (RLS 42501) e Coluna de Sinopse
--- Cole e execute no SQL Editor do Supabase para destravar o Upload imediatamente:
+export const SUPABASE_RLS_FIX_SQL = `-- Correção Rápida de Permissão (RLS 42501), Tabela de Usuários e Sinopse
+-- Cole e execute no SQL Editor do Supabase para destravar o Upload e Reconhecimento de Usuários:
+
+create table if not exists public.users (
+  id text primary key,
+  name text not null,
+  login text unique not null,
+  password text not null,
+  email text,
+  role text default 'user',
+  avatar text default '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+  my_list text[] default '{}',
+  reactions jsonb default '{}'::jsonb,
+  listen_progress jsonb default '{}'::jsonb,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
 
 alter table public.series disable row level security;
 alter table public.episodes disable row level security;
 alter table public.user_reactions disable row level security;
+alter table public.users disable row level security;
 
 alter table public.episodes add column if not exists is_synopsis boolean default false;
 
@@ -460,4 +494,7 @@ drop policy if exists "Allow public read reactions" on public.user_reactions;
 drop policy if exists "Allow authenticated insert reactions" on public.user_reactions;
 drop policy if exists "Allow all on reactions" on public.user_reactions;
 create policy "Allow all on reactions" on public.user_reactions for all using (true) with check (true);
+
+drop policy if exists "Allow all on users" on public.users;
+create policy "Allow all on users" on public.users for all using (true) with check (true);
 `;

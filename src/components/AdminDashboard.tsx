@@ -71,6 +71,7 @@ export const AdminDashboard: React.FC = () => {
     testSupabase,
     pushToSupabaseCloud,
     pullFromSupabaseCloud,
+    syncAllUsersToCloud,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'supabase'>('analytics');
@@ -201,7 +202,7 @@ export const AdminDashboard: React.FC = () => {
       likes: editingSeries.likes ?? 0,
       unlikes: editingSeries.unlikes ?? 0,
       totalListens: editingSeries.totalListens ?? 0,
-      episodeDurationEstimate: editingSeries.episodeDurationEstimate || '20 min por episódio',
+      episodeDurationEstimate: '2 a 4 min por episódio',
       createdAt: editingSeries.createdAt || new Date().toISOString(),
     };
 
@@ -224,7 +225,7 @@ export const AdminDashboard: React.FC = () => {
       : 1;
     const isSynopsis = Boolean(editingEpisode.isSynopsis || episodeNum === 0);
     const finalEpisodeNum = isSynopsis ? 0 : Math.max(1, episodeNum);
-    const durMinutes = Number(editingEpisode.durationMinutes) || 20;
+    const durMinutes = Number(editingEpisode.durationMinutes) || (isSynopsis ? 2 : 3);
 
     const newEpisode: AudioEpisode = {
       id: targetEpisodeId,
@@ -1655,12 +1656,12 @@ alter table public.episodes add column if not exists is_synopsis boolean default
                 </div>
 
                 <div>
-                  <label className="text-neutral-400 block mb-1">Duração dos Episódios * (Req. 4)</label>
+                  <label className="text-neutral-400 block mb-1">Duração dos Episódios (Padrão: 2 a 4 min)</label>
                   <input
                     type="text"
-                    value={editingSeries?.episodeDurationEstimate || '20 min'}
+                    value={editingSeries?.episodeDurationEstimate || '2 a 4 min por episódio'}
                     onChange={(e) => setEditingSeries(prev => ({ ...prev, episodeDurationEstimate: e.target.value }))}
-                    placeholder="Ex: 20 min ou 18 a 25 min"
+                    placeholder="2 a 4 min por episódio"
                     className="w-full bg-neutral-800 text-white rounded px-3 py-2 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
                   />
                 </div>

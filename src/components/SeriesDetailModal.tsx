@@ -231,9 +231,9 @@ export const SeriesDetailModal: React.FC = () => {
                   {series.ratingBadge}
                 </span>
                 <span className="text-neutral-300">{seriesEpisodes.length} Episódios</span>
-                <span className="flex items-center gap-1 text-xs text-amber-300 font-semibold bg-neutral-800/80 px-2 py-0.5 rounded border border-neutral-700">
+                <span className="flex items-center gap-1 text-xs text-amber-300 font-semibold bg-neutral-800/80 px-2.5 py-0.5 rounded border border-neutral-700">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>{series.episodeDurationEstimate || '20 min por episódio'}</span>
+                  <span>2 a 4 min por episódio</span>
                 </span>
                 <span className="px-2 py-0.5 bg-neutral-800 border border-neutral-700 rounded text-xs text-neutral-300 font-medium">
                   {series.audioQuality}

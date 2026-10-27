@@ -84,13 +84,8 @@ export const AudioPlayer: React.FC = () => {
     <div className="fixed inset-0 z-[70] bg-[#141414] flex flex-col justify-between p-3.5 sm:p-6 md:p-12 animate-in fade-in duration-300 overflow-y-auto select-none">
       {/* Top Header Bar in Theater Mode - Fully Responsive for Smartphones */}
       <div className="flex items-center justify-between gap-2 pb-3 md:pb-4 border-b border-neutral-800 shrink-0">
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-          <span className="text-lg sm:text-xl font-bold tracking-tight text-[#E50914] font-brand shrink-0">
-            skills<span className="text-white">.ON!</span>
-          </span>
-          <span className="hidden sm:inline text-neutral-500">|</span>
-          <span className="hidden sm:inline text-xs sm:text-sm text-neutral-300 font-medium truncate">Modo Imersivo</span>
-        </div>
+        {/* Spacer on left - SKILLS.ON Modo Imersivo text removed as requested */}
+        <div />
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {drivePreviewEmbedUrl && (

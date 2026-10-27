@@ -75,14 +75,13 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
           }}
         />
 
-        {/* Quality and Duration pill badge */}
+        {/* Quality and Total Episodes badge (replaces duration tag on Home screen) */}
         <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 z-10 flex items-center gap-1">
-          <span className="px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/75 backdrop-blur-xs text-amber-300 border border-amber-300/30">
+          <span className="px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/85 backdrop-blur-xs text-[#E50914] border border-[#E50914]/40">
             AUDIO
           </span>
-          <span className="px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold bg-black/80 backdrop-blur-xs text-neutral-200 border border-neutral-700 flex items-center gap-1">
-            <Clock className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-amber-400" />
-            <span className="truncate max-w-[60px] sm:max-w-none">{series.episodeDurationEstimate || (firstContentEpisode ? firstContentEpisode.durationFormatted : '20 min')}</span>
+          <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/85 backdrop-blur-xs text-neutral-200 border border-neutral-700">
+            {trainingEpisodesCount > 0 ? `${trainingEpisodesCount} eps` : (seriesEpisodes.length > 0 ? `${seriesEpisodes.length} eps` : '10 eps')}
           </span>
         </div>
 

@@ -3,6 +3,7 @@ import { AudioSeries, AudioEpisode, UserProfile, ReactionType, SupabaseConfig } 
 import { INITIAL_SERIES, INITIAL_EPISODES, INITIAL_USERS } from '../data/initialData';
 import { resolveAudioUrl } from '../utils/audioResolver';
 import { encryptPassword, decryptPassword } from '../utils/crypto';
+import { getResolvedSupabaseConfig } from '../config/supabaseConfig';
 import {
   decodeCatalogFromUrl,
   encodeCatalogForUrl,
@@ -14,6 +15,10 @@ import {
   deleteEpisodeFromSupabase,
   pushSingleSeriesToSupabase,
   deleteSeriesFromSupabase,
+  pushSingleUserToSupabase,
+  deleteUserFromSupabase,
+  pushAllUsersToSupabase,
+  fetchUserByLoginFromSupabase,
 } from '../utils/syncManager';
 
 interface AppContextType {
@@ -93,6 +98,7 @@ interface AppContextType {
   addOrUpdateEpisode: (episodeData: AudioEpisode) => void;
   deleteEpisode: (episodeId: string) => void;
   updateSupabaseConfig: (config: Partial<SupabaseConfig>) => void;
+  syncAllUsersToCloud: () => Promise<{ ok: boolean; message: string }>;
   resetAllData: () => void;
 }
 
@@ -189,24 +195,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [supabaseConfig, setSupabaseConfig] = useState<SupabaseConfig>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_SUPABASE);
-      return saved
-        ? JSON.parse(saved)
-        : {
-            supabaseUrl: '',
-            supabaseAnonKey: '',
-            useLiveSupabase: false,
-            status: 'idle',
-          };
-    } catch {
+    const resolved = getResolvedSupabaseConfig();
+    if (resolved.supabaseUrl && resolved.supabaseAnonKey) {
       return {
-        supabaseUrl: '',
-        supabaseAnonKey: '',
-        useLiveSupabase: false,
-        status: 'idle',
+        supabaseUrl: resolved.supabaseUrl,
+        supabaseAnonKey: resolved.supabaseAnonKey,
+        useLiveSupabase: resolved.useLiveSupabase,
+        status: 'connected',
       };
     }
+    return {
+      supabaseUrl: '',
+      supabaseAnonKey: '',
+      useLiveSupabase: false,
+      status: 'idle',
+    };
   });
 
   // UI state
@@ -419,6 +422,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
               return merged;
             });
+
+            // 3. Safe non-destructive merge for users (Ensures multi-device login recognition!)
+            if (res.users && res.users.length > 0) {
+              setAllUsers(currentUsers => {
+                const userMap = new Map<string, UserProfile>();
+                // Keep local users first
+                currentUsers.forEach(u => userMap.set(u.login.trim().toLowerCase(), u));
+                // Merge users from cloud
+                res.users!.forEach(u => {
+                  const key = u.login.trim().toLowerCase();
+                  const existing = userMap.get(key);
+                  if (existing) {
+                    userMap.set(key, {
+                      ...existing,
+                      ...u,
+                      name: u.name || existing.name,
+                      password: u.password || existing.password,
+                      role: u.role || existing.role,
+                    });
+                  } else {
+                    userMap.set(key, u);
+                  }
+                });
+                const mergedUsers = Array.from(userMap.values());
+                try {
+                  localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(mergedUsers));
+                } catch (e) {}
+
+                // Auto-push any local users that aren't yet in Supabase
+                const supabaseUserLogins = new Set(res.users!.map(u => u.login.trim().toLowerCase()));
+                const localOnlyUsers = currentUsers.filter(u => !supabaseUserLogins.has(u.login.trim().toLowerCase()));
+                if (localOnlyUsers.length > 0) {
+                  localOnlyUsers.forEach(lu => {
+                    pushSingleUserToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, lu);
+                  });
+                }
+
+                return mergedUsers;
+              });
+            }
 
             setSupabaseConfig(prev => ({ ...prev, status: 'connected', errorMessage: undefined }));
           }
@@ -824,6 +867,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true };
     }
 
+    // Direct Supabase Live Auth Fallback (For cross-device login when student was created on another machine)
+    if (supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      try {
+        const cloudUser = await fetchUserByLoginFromSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, cleanLogin);
+        if (cloudUser) {
+          let actualPassword = cloudUser.password;
+          if (cloudUser.password.startsWith('enc:') || cloudUser.password.startsWith('enc_b64:')) {
+            actualPassword = await decryptPassword(cloudUser.password);
+          }
+          if (actualPassword === pass || cloudUser.password === pass) {
+            setAllUsers(prev => {
+              const exists = prev.some(u => u.id === cloudUser.id || u.login.toLowerCase() === cloudUser.login.toLowerCase());
+              const updated = exists ? prev : [...prev, cloudUser];
+              try {
+                localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+            setCurrentUserId(cloudUser.id);
+            setIsLoggedIn(true);
+            setCurrentView(cloudUser.role === 'admin' ? 'admin' : 'home');
+            return { success: true };
+          }
+        }
+      } catch (err) {
+        console.warn('Direct Supabase cloud user lookup error:', err);
+      }
+    }
+
     return {
       success: false,
       message: 'Credenciais inválidas. Verifique seu login e senha.',
@@ -863,13 +935,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // User Management Methods (For Admin) with AES-GCM Encryption
+  // User Management Methods (For Admin) with AES-GCM Encryption & Real-time Supabase Cloud Sync
   const createUser = async (userData: { name: string; login: string; password: string; role: 'admin' | 'user'; email?: string }): Promise<UserProfile> => {
     const encrypted = await encryptPassword(userData.password);
     const newUser: UserProfile = {
       id: `user-${Date.now()}`,
       name: userData.name.trim(),
-      login: userData.login.trim(),
+      login: userData.login.trim().toLowerCase(),
       password: encrypted,
       email: userData.email?.trim() || `${userData.login.trim()}@skillson.com`,
       role: userData.role,
@@ -880,7 +952,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
 
-    setAllUsers(prev => [...prev, newUser]);
+    setAllUsers(prev => {
+      const updated = [...prev, newUser];
+      try {
+        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Real-time synchronization to Supabase cloud table public.users
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      pushSingleUserToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, newUser)
+        .then(ok => {
+          if (ok) console.log(`[Supabase] User ${newUser.login} successfully synced to cloud.`);
+        })
+        .catch(err => console.warn('User push to Supabase failed:', err));
+    }
+
     return newUser;
   };
 
@@ -889,7 +977,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!encrypted.startsWith('enc:') && !encrypted.startsWith('enc_b64:')) {
       encrypted = await encryptPassword(updatedUser.password);
     }
-    setAllUsers(prev => prev.map(u => (u.id === updatedUser.id ? { ...updatedUser, password: encrypted } : u)));
+    const finalUser = { ...updatedUser, password: encrypted };
+    setAllUsers(prev => {
+      const updated = prev.map(u => (u.id === updatedUser.id ? finalUser : u));
+      try {
+        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      pushSingleUserToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, finalUser);
+    }
   };
 
   const deleteUser = (userId: string) => {
@@ -897,7 +996,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (userId === 'user-admin' || currentUser.id === userId) {
       return;
     }
-    setAllUsers(prev => prev.filter(u => u.id !== userId));
+    setAllUsers(prev => {
+      const updated = prev.filter(u => u.id !== userId);
+      try {
+        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      deleteUserFromSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, userId);
+    }
   };
 
   const addOrUpdateSeries = (seriesData: AudioSeries) => {
@@ -1072,10 +1181,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!supabaseConfig.supabaseUrl || !supabaseConfig.supabaseAnonKey) {
       return { ok: false, message: 'Configure a URL e Chave Anon do Supabase primeiro.' };
     }
-    const res = await pushCatalogToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, series, episodes);
+    const res = await pushCatalogToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, series, episodes, allUsers);
     if (res.ok) {
       setSupabaseConfig(prev => ({ ...prev, status: 'connected', errorMessage: undefined }));
-      setSyncNotification('☁️ Catálogo enviado e sincronizado com o Supabase com sucesso!');
+      setSyncNotification('☁️ Catálogo e alunos enviados e sincronizados com o Supabase com sucesso!');
     } else {
       setSupabaseConfig(prev => ({ ...prev, status: 'error', errorMessage: res.message }));
     }
@@ -1090,14 +1199,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (res.ok && res.series && res.episodes) {
       setSeries(res.series);
       setEpisodes(res.episodes);
+      if (res.users && res.users.length > 0) {
+        setAllUsers(res.users);
+        try {
+          localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(res.users));
+        } catch {}
+      }
       localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(res.series));
       localStorage.setItem(STORAGE_KEY_EPISODES, JSON.stringify(res.episodes));
       setSupabaseConfig(prev => ({ ...prev, status: 'connected', errorMessage: undefined }));
-      setSyncNotification(`☁️ Sincronizado do Supabase! ${res.series.length} séries e ${res.episodes.length} episódios atualizados.`);
+      setSyncNotification(`☁️ Sincronizado do Supabase! ${res.series.length} séries, ${res.episodes.length} episódios e ${res.users?.length || 0} alunos atualizados.`);
     } else {
       setSupabaseConfig(prev => ({ ...prev, status: 'error', errorMessage: res.message }));
     }
     return { ok: res.ok, message: res.message };
+  };
+
+  const syncAllUsersToCloud = async (): Promise<{ ok: boolean; message: string }> => {
+    if (!supabaseConfig.supabaseUrl || !supabaseConfig.supabaseAnonKey) {
+      return { ok: false, message: 'Configure a URL e Chave Anon do Supabase primeiro.' };
+    }
+    const res = await pushAllUsersToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, allUsers);
+    if (res.ok) {
+      setSyncNotification(`☁️ ${allUsers.length} usuários sincronizados com o Supabase!`);
+    }
+    return res;
   };
 
   const updateSupabaseConfig = (config: Partial<SupabaseConfig>) => {
@@ -1158,6 +1284,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         testSupabase,
         pushToSupabaseCloud,
         pullFromSupabaseCloud,
+        syncAllUsersToCloud,
         playEpisode,
         stopAudio,
         closePlayerAndGoHome,

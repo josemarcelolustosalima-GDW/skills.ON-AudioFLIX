@@ -259,7 +259,7 @@ function MainApp() {
               {featuredSeries && <HeroBillboard series={featuredSeries} />}
 
               {/* Negative margin row stack like Netflix */}
-              <div className="relative -mt-6 sm:-mt-8 md:-mt-14 z-20 space-y-2 md:space-y-4">
+              <div className="relative -mt-3 sm:-mt-5 md:-mt-8 z-20 space-y-2 md:space-y-4">
                 {/* Row 1: Continuar Ouvindo (if any in progress) */}
                 {continueListeningSeries.length > 0 && (
                   <CategoryRow
@@ -310,12 +310,15 @@ function MainApp() {
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <img
-              src="/assets/aistudio/skills_ON_BRANCO_transparente_a2b697f4.png"
-              alt="skills.ON! Educação Executiva"
-              className="h-7 sm:h-8 md:h-9 object-contain"
+              src="/assets/aistudio/audio_skills_logo_new.jpeg"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'https://i.imgur.com/LyJxYFP.jpeg';
+              }}
+              alt="AUDIO SKILLS"
+              className="h-7 sm:h-8 md:h-9 object-contain rounded"
             />
             <span className="hidden sm:inline text-neutral-600">|</span>
-            <span className="text-neutral-400">Plataforma de Treinamento Imersivo em Áudio Séries</span>
+            <span className="text-neutral-400">Plataforma de Treinamento Imersivo em Áudio Séries por skills.ON!</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-neutral-400">

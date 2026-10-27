@@ -25,7 +25,7 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
   const isInMyList = currentUser.myList.includes(series.id);
 
   return (
-    <div className="relative w-full h-[75vh] min-h-[500px] md:h-[85vh] md:min-h-[620px] max-h-[880px] overflow-hidden select-none">
+    <div className="relative w-full h-[80vh] min-h-[620px] sm:min-h-[660px] md:h-[88vh] md:min-h-[720px] max-h-[960px] overflow-hidden select-none">
       {/* Background Hero Banner */}
       <div className="absolute inset-0">
         <img
@@ -39,49 +39,61 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
         />
 
         {/* Netflix Multi-direction Scrim Gradients */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-[#141414]/75 to-transparent w-full md:w-3/4 z-10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-[#141414]/80 to-transparent w-full md:w-3/4 z-10" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-transparent to-black/30 z-10" />
         <div className="absolute bottom-0 left-0 right-0 h-36 bg-gradient-to-t from-[#141414] to-transparent z-10" />
       </div>
 
-      {/* Hero Content Container with Generous Top Clearance */}
-      <div className="relative z-20 h-full flex flex-col justify-end pt-20 sm:pt-28 md:pt-36 pb-16 sm:pb-20 md:pb-28 px-4 md:px-12 max-w-3xl">
-        {/* Category & Badge */}
-        <div className="flex items-center gap-2 mb-1.5 sm:mb-2 text-[11px] sm:text-xs font-semibold tracking-wider text-neutral-300">
-          <span className="text-[#E50914] font-bold tracking-widest uppercase">ÁUDIO SÉRIE ORIGINAL</span>
-          <span className="text-neutral-500">•</span>
-          <span className="text-white/90 truncate">{series.category}</span>
+      {/* Hero Content Container with Generous Clearance from fixed header */}
+      <div className="relative z-20 h-full flex flex-col justify-end pt-24 sm:pt-28 md:pt-32 pb-8 sm:pb-12 md:pb-14 px-4 md:px-12 max-w-3xl">
+        {/* Official AUDIO SKILLS Brand Logo Centered on 'ÁUDIO SÉRIE ORIGINAL' phrase (Doubled height, proportional width) */}
+        <div className="shrink-0 flex flex-wrap items-end gap-2 mb-2 sm:mb-3 text-[11px] sm:text-xs font-semibold tracking-wider text-neutral-300">
+          <div className="inline-flex flex-col items-center">
+            <img
+              src="/assets/aistudio/audio_skills_logo_new.jpeg"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'https://i.imgur.com/LyJxYFP.jpeg';
+              }}
+              alt="AUDIO SKILLS"
+              className="h-20 sm:h-24 md:h-28 lg:h-32 w-auto object-contain mix-blend-screen filter drop-shadow-[0_4px_16px_rgba(0,0,0,0.9)] mb-2 select-none"
+            />
+            <span className="text-[#E50914] font-bold tracking-widest uppercase">ÁUDIO SÉRIE ORIGINAL</span>
+          </div>
+          <div className="flex items-center gap-2 pb-0.5">
+            <span className="text-neutral-500">•</span>
+            <span className="text-white/90 truncate max-w-[240px] sm:max-w-none">{series.category}</span>
+          </div>
         </div>
 
         {/* Title */}
-        <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.15] mb-2 sm:mb-3 drop-shadow-md">
+        <h1 className="shrink-0 text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.15] mb-2 sm:mb-3 drop-shadow-md">
           {series.title}
         </h1>
 
         {/* Metadata info strip */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs md:text-sm font-medium mb-3 sm:mb-4 text-neutral-300">
+        <div className="shrink-0 flex flex-wrap items-center gap-2 sm:gap-3 text-xs md:text-sm font-medium mb-3 sm:mb-4 text-neutral-300">
           <span className="text-emerald-400 font-bold">{series.matchScore}% relevante</span>
           <span className="text-neutral-400">{series.releaseYear}</span>
           <span className="px-1.5 py-0.5 border border-neutral-600 rounded text-[10px] sm:text-[11px] text-neutral-300 font-semibold">
             {series.ratingBadge}
           </span>
-          <span className="text-neutral-400 hidden xs:inline">{seriesEpisodes.length} Episódios</span>
-          <span className="flex items-center gap-1 text-amber-300 font-medium">
-            <Clock className="w-3.5 h-3.5" />
-            <span>{series.episodeDurationEstimate || (firstContentEpisode ? firstContentEpisode.durationFormatted : '20 min')}</span>
+          {/* TOTAL NUMBER OF EPISODES TAG (Replaces duration tag on Home screen) */}
+          <span className="px-2 py-0.5 bg-neutral-800/90 border border-neutral-700 rounded text-neutral-200 font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-[#E50914]" />
+            <span>{trainingEpisodesCount > 0 ? `${trainingEpisodesCount} ${trainingEpisodesCount === 1 ? 'Episódio' : 'Episódios'}` : (seriesEpisodes.length > 0 ? `${seriesEpisodes.length} Episódios` : '10 Episódios')}</span>
           </span>
           <span className="px-1.5 py-0.5 bg-neutral-800/80 border border-neutral-700 rounded text-[10px] sm:text-[11px] text-neutral-300 font-medium hidden sm:inline-block">
             {series.audioQuality}
           </span>
         </div>
 
-        {/* Synopsis */}
-        <p className="text-xs sm:text-sm md:text-base text-neutral-200 leading-relaxed mb-4 sm:mb-6 line-clamp-2 sm:line-clamp-3 md:line-clamp-4 drop-shadow">
+        {/* Synopsis - shrink-0 guarantees flexbox never squashes or cuts off this text */}
+        <p className="shrink-0 text-xs sm:text-sm md:text-base text-neutral-200 leading-relaxed mb-4 sm:mb-5 max-w-2xl line-clamp-3 md:line-clamp-4 drop-shadow-md">
           {series.synopsis}
         </p>
 
         {/* CTAs: Only 'Mais Informações' as requested for proper screen sequencing */}
-        <div className="flex items-center gap-3">
+        <div className="shrink-0 flex items-center gap-3">
           <button
             onClick={() => openSeriesModal(series)}
             className="flex items-center gap-2 px-5 sm:px-7 py-2.5 sm:py-3 rounded-md bg-white hover:bg-neutral-200 text-black font-bold text-xs sm:text-base transition-all active:scale-95 shadow-xl cursor-pointer"
