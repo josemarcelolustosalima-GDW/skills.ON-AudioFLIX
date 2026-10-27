@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Info, Volume2, VolumeX, Plus, Check, Clock } from 'lucide-react';
+import { Info, Plus, Check } from 'lucide-react';
 import { AudioSeries } from '../types';
 
 interface HeroBillboardProps {
@@ -11,8 +11,6 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
   const {
     episodes,
     openSeriesModal,
-    isMuted,
-    toggleMute,
     currentUser,
     toggleMyList,
   } = useApp();
@@ -20,7 +18,6 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
   const seriesEpisodes = episodes
     .filter(e => e.seriesId.trim().toLowerCase() === series.id.trim().toLowerCase())
     .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
-  const firstContentEpisode = seriesEpisodes.find(e => !e.isSynopsis && Number(e.episodeNumber) > 0) || seriesEpisodes[0];
   const trainingEpisodesCount = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0).length;
   const isInMyList = currentUser.myList.includes(series.id);
 
@@ -110,21 +107,6 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
           >
             {isInMyList ? <Check className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" /> : <Plus className="w-4 h-4 sm:w-5 sm:h-5" />}
           </button>
-        </div>
-      </div>
-
-      {/* Right Edge: Mute / Sound Toggle & Rating Flag */}
-      <div className="absolute right-0 bottom-24 z-20 flex items-center">
-        <button
-          onClick={toggleMute}
-          className="p-2 rounded-full border border-neutral-500/60 bg-black/50 hover:bg-black/80 text-white mr-4 transition-colors backdrop-blur-sm"
-          title={isMuted ? 'Ativar Som' : 'Silenciar'}
-        >
-          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-        </button>
-
-        <div className="border-l-2 border-neutral-300 bg-neutral-900/80 backdrop-blur-sm py-1 pl-3 pr-6 text-xs font-bold text-neutral-300">
-          {series.ratingBadge}
         </div>
       </div>
     </div>

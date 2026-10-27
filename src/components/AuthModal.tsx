@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, Lock, ArrowRight, Eye, EyeOff, CheckCircle2, ShieldCheck, User } from 'lucide-react';
+import { Lock, ArrowRight, Eye, EyeOff, CheckCircle2, ShieldCheck, User } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -43,32 +43,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-4">
-      {/* Click outside backdrop */}
-      <div className="fixed inset-0" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden select-none">
+      {/* Netflix-style Cinematic Training Mosaic Background */}
+      <div className="absolute inset-0 z-0">
+        <img
+          src="/assets/aistudio/netflix_mosaic_bg.jpg"
+          alt="AUDIO SKILLS Treinamento Corporativo e Soft Skills"
+          className="w-full h-full object-cover object-center scale-105 filter brightness-75 contrast-110"
+        />
+        {/* Netflix Translucent Gradient & Vignette Overlays (Enhances readability without obscuring the mosaic) */}
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/80" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.35)_0%,rgba(0,0,0,0.85)_100%)]" />
+      </div>
 
-      <div className="relative w-full max-w-md bg-[#181818] border border-neutral-800 rounded-2xl p-6 sm:p-8 text-white shadow-2xl z-10 animate-in fade-in zoom-in-95 duration-200">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-          title="Fechar"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Brand Header with Original Logo */}
+      {/* Solid Black Login Box (Remains perfectly readable and central) */}
+      <div className="relative w-full max-w-md bg-black/90 sm:bg-[#141414]/95 border border-neutral-800 rounded-2xl p-6 sm:p-8 text-white shadow-[0_20px_60px_rgba(0,0,0,0.9)] z-10 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+        {/* Brand Header with Enlarged Official AUDIO SKILLS Logo (No Close 'X' button as requested) */}
         <div className="text-center mb-6">
-            <img
-              src="/assets/aistudio/audio_skills_logo_new.jpeg"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = 'https://i.imgur.com/LyJxYFP.jpeg';
-              }}
-              alt="AUDIO SKILLS por skills.ON!"
-              className="h-11 sm:h-12 object-contain rounded-md mx-auto mb-3"
-            />
-          <h2 className="text-lg font-bold text-white tracking-tight">Entrar na Plataforma</h2>
-          <p className="text-xs text-neutral-400 mt-0.5">
+          <img
+            src="/assets/aistudio/audio_skills_logo_new.jpeg"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = 'https://i.imgur.com/LyJxYFP.jpeg';
+            }}
+            alt="AUDIO SKILLS por skills.ON!"
+            className="h-16 sm:h-20 md:h-22 w-auto max-w-[200px] object-contain mx-auto mb-3 mix-blend-screen filter drop-shadow-[0_4px_16px_rgba(0,0,0,0.9)]"
+          />
+          <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">Entrar na Plataforma</h2>
+          <p className="text-xs text-neutral-400 mt-1">
             Áudio Séries de Treinamento e Educação Executiva
           </p>
         </div>
