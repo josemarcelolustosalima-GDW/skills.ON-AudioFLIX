@@ -2,11 +2,11 @@
 
 @layer base {
   :root {
-    --netflix-black: #141414;
-    --netflix-dark: #181818;
-    --netflix-card: #202020;
-    --netflix-red: #E50914;
-    --netflix-red-hover: #b80710;
+    --app-black: #141414;
+    --app-dark: #181818;
+    --app-card: #202020;
+    --app-brand: #E50914;
+    --app-brand-hover: #b80710;
   }
 
   body {
@@ -19,7 +19,7 @@
   }
 }
 
-/* Custom scrollbars for Netflix feel */
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

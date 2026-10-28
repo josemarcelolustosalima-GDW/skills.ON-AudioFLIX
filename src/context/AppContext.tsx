@@ -79,6 +79,7 @@ interface AppContextType {
   nextEpisode: () => void;
   prevEpisode: () => void;
   toggleReaction: (seriesId: string, reaction: ReactionType) => void;
+  toggleEpisodeReaction: (episodeId: string, reaction: ReactionType) => void;
   toggleMyList: (seriesId: string) => void;
   openSeriesModal: (series: AudioSeries) => void;
   closeSeriesModal: () => void;
@@ -742,7 +743,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Like / Unlike Netflix style
+  // Like / Unlike por Série (avaliação global da série)
   const toggleReaction = (seriesId: string, reaction: ReactionType) => {
     const previousReaction = currentUser.reactions[seriesId] || null;
     const nextReaction = previousReaction === reaction ? null : reaction;
@@ -784,6 +785,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...s,
           likes: Math.max(0, s.likes + likesDelta),
           unlikes: Math.max(0, s.unlikes + unlikesDelta),
+        };
+      })
+    );
+  };
+
+  // Avaliação e Like/Dislike Individual por Episódio (totalmente independente da série e de outros episódios)
+  const toggleEpisodeReaction = (episodeId: string, reaction: ReactionType) => {
+    const previousReaction = currentUser.reactions[episodeId] || null;
+    const nextReaction = previousReaction === reaction ? null : reaction;
+
+    setAllUsers(prevUsers =>
+      prevUsers.map(user => {
+        if (user.id === currentUser.id) {
+          const updated = { ...user.reactions };
+          if (nextReaction === null) {
+            delete updated[episodeId];
+          } else {
+            updated[episodeId] = nextReaction;
+          }
+          return { ...user, reactions: updated };
+        }
+        return user;
+      })
+    );
+
+    setEpisodes(prevEpisodes =>
+      prevEpisodes.map(ep => {
+        if (ep.id !== episodeId) return ep;
+        let likesDelta = 0;
+        let unlikesDelta = 0;
+
+        if (previousReaction === 'like' || previousReaction === 'double_like') {
+          likesDelta -= previousReaction === 'double_like' ? 2 : 1;
+        } else if (previousReaction === 'dislike') {
+          unlikesDelta -= 1;
+        }
+
+        if (nextReaction === 'like' || nextReaction === 'double_like') {
+          likesDelta += nextReaction === 'double_like' ? 2 : 1;
+        } else if (nextReaction === 'dislike') {
+          unlikesDelta += 1;
+        }
+
+        return {
+          ...ep,
+          likes: Math.max(0, (ep.likes || 0) + likesDelta),
+          unlikes: Math.max(0, (ep.unlikes || 0) + unlikesDelta),
         };
       })
     );
@@ -1299,6 +1347,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         nextEpisode,
         prevEpisode,
         toggleReaction,
+        toggleEpisodeReaction,
         toggleMyList,
         openSeriesModal,
         closeSeriesModal,

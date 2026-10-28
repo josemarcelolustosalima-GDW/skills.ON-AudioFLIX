@@ -100,7 +100,7 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
         </div>
       </div>
 
-      {/* Hover Card Overlay (Netflix Mini-Details) */}
+      {/* Hover Card Overlay (Mini-Details) */}
       {isHovered && (
         <div className="hidden md:block absolute -top-4 -left-3 -right-3 z-30 bg-[#181818] rounded-lg shadow-2xl border border-neutral-700/80 p-3 animate-in fade-in zoom-in-95 duration-200">
           {/* Mini Preview Header */}

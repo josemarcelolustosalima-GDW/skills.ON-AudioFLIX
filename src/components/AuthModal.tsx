@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Lock, ArrowRight, Eye, EyeOff, CheckCircle2, ShieldCheck, User } from 'lucide-react';
+import loginMosaicBg from '../assets/images/audio_skills_mosaic_bg.jpg';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -44,17 +45,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden select-none">
-      {/* Netflix-style Cinematic Training Mosaic Background */}
-      <div className="absolute inset-0 z-0">
+      {/* Cinematic Training Mosaic Background */}
+      <div className="absolute inset-0 z-0 overflow-hidden bg-black">
         <img
-          src="/assets/aistudio/netflix_mosaic_bg.jpg"
+          src={loginMosaicBg}
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/assets/aistudio/audio_skills_mosaic_bg.jpg';
+          }}
           alt="AUDIO SKILLS Treinamento Corporativo e Soft Skills"
-          className="w-full h-full object-cover object-center scale-105 filter brightness-75 contrast-110"
+          className="w-full h-full object-cover object-center scale-105 filter brightness-85 contrast-105"
         />
-        {/* Netflix Translucent Gradient & Vignette Overlays (Enhances readability without obscuring the mosaic) */}
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/80" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.35)_0%,rgba(0,0,0,0.85)_100%)]" />
+        {/* Balanced Dark Overlay: Keeps photo mosaic clearly visible while ensuring login card readability */}
+        <div className="absolute inset-0 bg-black/50" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/70" />
       </div>
 
       {/* Solid Black Login Box (Remains perfectly readable and central) */}

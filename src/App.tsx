@@ -113,7 +113,7 @@ function MainApp() {
           <AdminDashboard />
         </div>
       ) : (
-        /* REGULAR NETFLIX EXPERIENCE (MOBILE ADAPTED WITH SAFE CLEARANCE) */
+        /* REGULAR AUDIO SKILLS EXPERIENCE (MOBILE ADAPTED WITH SAFE CLEARANCE) */
         <main className="flex-1 pb-28 md:pb-24">
           {/* SEARCH RESULTS VIEW */}
           {searchQuery ? (
@@ -211,7 +211,7 @@ function MainApp() {
                     Catálogo Completo de Áudio Séries
                   </h1>
                   <p className="text-xs text-neutral-400 mt-1">
-                    Explore todos os programas de treinamento com padrão imersivo Netflix.
+                    Explore todos os programas de treinamento executivo e desenvolvimento de habilidades.
                   </p>
                 </div>
 
@@ -253,12 +253,12 @@ function MainApp() {
               </div>
             </div>
           ) : (
-            /* HOME VIEW (DEFAULT NETFLIX HOME BILLBOARD & CAROUSELS) */
+            /* HOME VIEW (BILLBOARD & CATEGORY ROWS) */
             <>
               {/* Hero Billboard */}
               {featuredSeries && <HeroBillboard series={featuredSeries} />}
 
-              {/* Negative margin row stack like Netflix */}
+              {/* Row stack with responsive spacing */}
               <div className="relative -mt-3 sm:-mt-5 md:-mt-8 z-20 space-y-2 md:space-y-4">
                 {/* Row 1: Continuar Ouvindo (if any in progress) */}
                 {continueListeningSeries.length > 0 && (
@@ -293,7 +293,7 @@ function MainApp() {
         </main>
       )}
 
-      {/* Netflix Series Details & Episode List Modal */}
+      {/* Series Details & Episode List Modal */}
       <SeriesDetailModal />
 
       {/* Persistent Audio Player (Visão Expandida Imersiva Oficial) */}
@@ -305,7 +305,7 @@ function MainApp() {
         onClose={() => setAuthModalOpen(false)}
       />
 
-      {/* Netflix Standard Dark Footer (with clearance for mobile bottom nav) */}
+      {/* Standard Dark Footer (with clearance for mobile bottom nav) */}
       <footer className="mt-auto border-t border-neutral-900 bg-[#101010] py-8 sm:py-10 px-4 md:px-12 text-neutral-500 text-xs mb-14 md:mb-0">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -339,7 +339,7 @@ function MainApp() {
           </div>
 
           <div className="pt-4 border-t border-neutral-900 flex flex-col sm:flex-row items-center justify-between gap-2 text-neutral-600 text-[11px]">
-            <p>© {new Date().getFullYear()} skills.ON! — Todos os direitos reservados. Padrão de layout e experiência visual inspirado na Netflix.</p>
+            <p>© 2026 skills.ON! - Todos os direitos reservados.</p>
             <p className="flex items-center gap-1.5">
               <span>Hospedagem Netlify</span>
               <span>•</span>
@@ -349,7 +349,7 @@ function MainApp() {
         </div>
       </footer>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (Padrão Netflix / Spotify para Smartphones) */}
+      {/* MOBILE BOTTOM NAVIGATION BAR (Padrão Imersivo para Smartphones) */}
       <nav
         className={`fixed bottom-0 ${
           isMobilePreview

@@ -55,6 +55,7 @@ export const AudioPlayer: React.FC = () => {
     prevEpisode,
     currentUser,
     toggleReaction,
+    toggleEpisodeReaction,
     episodes,
     playEpisode,
     isPlayerExpanded,
@@ -65,7 +66,7 @@ export const AudioPlayer: React.FC = () => {
   // Requirement: ONLY the expanded theater view is active. No docked bottom bar.
   if (!isPlayerExpanded || !currentPlayingEpisode) return null;
 
-  const currentReaction = currentPlayingSeries ? currentUser.reactions[currentPlayingSeries.id] : null;
+  const currentEpisodeReaction = currentPlayingEpisode ? currentUser.reactions[currentPlayingEpisode.id] : null;
   const speedOptions = [0.75, 1.0, 1.25, 1.5, 2.0];
 
   // Series episodes for queue
@@ -352,25 +353,25 @@ export const AudioPlayer: React.FC = () => {
 
         {/* Buttons Row */}
         <div className="flex items-center justify-between">
-          {/* Reactions: Thumbs */}
+          {/* Individual Episode Reactions: Thumbs */}
           <div className="flex items-center gap-0.5 sm:gap-1">
-            {currentPlayingSeries && (
+            {currentPlayingEpisode && (
               <>
                 <button
-                  onClick={() => toggleReaction(currentPlayingSeries.id, 'like')}
+                  onClick={() => toggleEpisodeReaction(currentPlayingEpisode.id, 'like')}
                   className={`p-1.5 sm:p-2 rounded-full transition-colors cursor-pointer active:scale-90 ${
-                    currentReaction === 'like' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
+                    currentEpisodeReaction === 'like' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
                   }`}
-                  title="Gostei"
+                  title={currentEpisodeReaction === 'like' ? 'Desfazer curtida do episódio' : 'Curtir este episódio'}
                 >
                   <ThumbsUp className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
                 <button
-                  onClick={() => toggleReaction(currentPlayingSeries.id, 'dislike')}
+                  onClick={() => toggleEpisodeReaction(currentPlayingEpisode.id, 'dislike')}
                   className={`p-1.5 sm:p-2 rounded-full transition-colors cursor-pointer active:scale-90 ${
-                    currentReaction === 'dislike' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
+                    currentEpisodeReaction === 'dislike' ? 'text-[#E50914] bg-white/10' : 'text-neutral-400 hover:text-white'
                   }`}
-                  title="Não é para mim"
+                  title={currentEpisodeReaction === 'dislike' ? 'Desfazer dislike do episódio' : 'Não gostei deste episódio'}
                 >
                   <ThumbsDown className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>

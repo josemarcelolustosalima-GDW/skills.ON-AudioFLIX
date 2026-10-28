@@ -26,6 +26,7 @@ export const SeriesDetailModal: React.FC = () => {
     currentUser,
     toggleMyList,
     toggleReaction,
+    toggleEpisodeReaction,
     series: allSeries,
     currentPlayingEpisode,
     isPlaying,
@@ -323,7 +324,7 @@ export const SeriesDetailModal: React.FC = () => {
             )}
           </div>
 
-          {/* TAB 1: EPISODES LIST (Netflix Layout Standard with Prominent Visible Scrollbar) */}
+          {/* TAB 1: EPISODES LIST (Prominent Visible Scrollbar) */}
           {activeTab === 'episodes' && (
             <div className="space-y-3">
               {/* Episodes Header & Scroll indicator */}
@@ -446,8 +447,50 @@ export const SeriesDetailModal: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Right: Duration & Listen Button */}
-                        <div className="mt-2.5 md:mt-0 flex items-center justify-between md:justify-end gap-3 sm:gap-4 w-full md:w-auto shrink-0 pl-8 sm:pl-12 md:pl-0">
+                        {/* Right: Likes, Duration & Listen Button */}
+                        <div className="mt-2.5 md:mt-0 flex items-center justify-between md:justify-end gap-2.5 sm:gap-3.5 w-full md:w-auto shrink-0 pl-8 sm:pl-12 md:pl-0">
+                          {/* Individual Episode Reaction (independent per episode) */}
+                          <div className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded-full border border-neutral-800">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleEpisodeReaction(episode.id, 'like');
+                              }}
+                              className={`p-1 rounded-full transition-all cursor-pointer active:scale-90 ${
+                                currentUser.reactions[episode.id] === 'like' || currentUser.reactions[episode.id] === 'double_like'
+                                  ? 'text-[#E50914] bg-white/10'
+                                  : 'text-neutral-500 hover:text-white'
+                              }`}
+                              title={
+                                currentUser.reactions[episode.id] === 'like'
+                                  ? 'Desfazer curtida deste episódio'
+                                  : 'Curtir este episódio'
+                              }
+                            >
+                              <ThumbsUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleEpisodeReaction(episode.id, 'dislike');
+                              }}
+                              className={`p-1 rounded-full transition-all cursor-pointer active:scale-90 ${
+                                currentUser.reactions[episode.id] === 'dislike'
+                                  ? 'text-[#E50914] bg-white/10'
+                                  : 'text-neutral-500 hover:text-white'
+                              }`}
+                              title={
+                                currentUser.reactions[episode.id] === 'dislike'
+                                  ? 'Desfazer dislike deste episódio'
+                                  : 'Não curti este episódio'
+                              }
+                            >
+                              <ThumbsDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
                           <div className="flex items-center gap-1 text-[11px] sm:text-xs md:text-sm font-semibold text-neutral-400">
                             <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                             <span>{episode.durationFormatted || `${episode.durationMinutes} min`}</span>

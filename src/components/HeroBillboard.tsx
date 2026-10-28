@@ -35,7 +35,7 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
           }}
         />
 
-        {/* Netflix Multi-direction Scrim Gradients */}
+        {/* Cinematic Multi-direction Scrim Gradients */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-[#141414]/80 to-transparent w-full md:w-3/4 z-10" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-transparent to-black/30 z-10" />
         <div className="absolute bottom-0 left-0 right-0 h-36 bg-gradient-to-t from-[#141414] to-transparent z-10" />

@@ -409,7 +409,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="p-5 border-b border-neutral-800">
               <h3 className="text-base font-bold text-white">Relatório Consolidado de Avaliações por Áudio Série</h3>
               <p className="text-xs text-neutral-400">
-                Consolidação em tempo real das preferências dos estudantes (Likes, Amei e Unlikes padrão Netflix).
+                Consolidação em tempo real das preferências dos estudantes (Likes, Amei e Unlikes).
               </p>
             </div>
 
