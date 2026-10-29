@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Info, Plus, Check } from 'lucide-react';
+import { Info, Plus, Check, Play, CheckCircle2 } from 'lucide-react';
 import { AudioSeries } from '../types';
 
 interface HeroBillboardProps {
@@ -13,6 +13,7 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
     openSeriesModal,
     currentUser,
     toggleMyList,
+    playEpisode,
   } = useApp();
 
   const seriesEpisodes = episodes
@@ -20,6 +21,15 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
     .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
   const trainingEpisodesCount = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0).length;
   const isInMyList = currentUser.myList.includes(series.id);
+
+  // User progress metrics for this featured series
+  const completedEpisodesCount = seriesEpisodes.filter(e => currentUser.listenProgress[e.id]?.completed).length;
+  const isSeriesCompleted = seriesEpisodes.length > 0 && completedEpisodesCount === seriesEpisodes.length;
+  const seriesProgressPct = seriesEpisodes.length > 0 ? Math.round((completedEpisodesCount / seriesEpisodes.length) * 100) : 0;
+  const inProgressEpisode = seriesEpisodes.find(e => {
+    const p = currentUser.listenProgress[e.id];
+    return p && !p.completed && p.currentTime > 5;
+  }) || (completedEpisodesCount > 0 && completedEpisodesCount < seriesEpisodes.length ? seriesEpisodes.find(e => !currentUser.listenProgress[e.id]?.completed) : null);
 
   return (
     <div className="relative w-full h-[80vh] min-h-[620px] sm:min-h-[660px] md:h-[88vh] md:min-h-[720px] max-h-[960px] overflow-hidden select-none">
@@ -89,8 +99,52 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
           {series.synopsis}
         </p>
 
-        {/* CTAs: Only 'Mais Informações' as requested for proper screen sequencing */}
+        {/* Progress bar in Hero if user started listening */}
+        {seriesProgressPct > 0 && (
+          <div className="shrink-0 mb-3 max-w-xs bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-neutral-700/80 shadow-md">
+            <div className="flex items-center justify-between text-[11px] mb-1 font-semibold">
+              <span className="text-neutral-300 flex items-center gap-1">
+                {isSeriesCompleted ? (
+                  <>
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    <span className="text-emerald-400 font-bold">Concluída</span>
+                  </>
+                ) : (
+                  <span>Seu Progresso</span>
+                )}
+              </span>
+              <span className={isSeriesCompleted ? 'text-emerald-400 font-bold' : 'text-[#E50914] font-bold'}>
+                {completedEpisodesCount}/{seriesEpisodes.length} ({seriesProgressPct}%)
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-neutral-700 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  isSeriesCompleted ? 'bg-emerald-500' : 'bg-[#E50914]'
+                }`}
+                style={{ width: `${seriesProgressPct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* CTAs: Continuar (se em progresso), 'Mais Informações' e Minha Lista */}
         <div className="shrink-0 flex items-center gap-3">
+          {inProgressEpisode && (
+            <button
+              onClick={() => playEpisode(inProgressEpisode, series)}
+              className="flex items-center gap-2 px-5 sm:px-7 py-2.5 sm:py-3 rounded-md bg-[#E50914] hover:bg-[#b80710] text-white font-bold text-xs sm:text-base transition-all active:scale-95 shadow-xl shadow-[#E50914]/30 cursor-pointer"
+              title={`Continuar ouvindo ${inProgressEpisode.title}`}
+            >
+              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white" />
+              <span>
+                {currentUser.listenProgress[inProgressEpisode.id]?.currentTime && !currentUser.listenProgress[inProgressEpisode.id]?.completed
+                  ? `Continuar Ep. ${inProgressEpisode.episodeNumber}`
+                  : `Ouvir Ep. ${inProgressEpisode.episodeNumber}`}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={() => openSeriesModal(series)}
             className="flex items-center gap-2 px-5 sm:px-7 py-2.5 sm:py-3 rounded-md bg-white hover:bg-neutral-200 text-black font-bold text-xs sm:text-base transition-all active:scale-95 shadow-xl cursor-pointer"

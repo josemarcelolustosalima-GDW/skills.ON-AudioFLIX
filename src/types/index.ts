@@ -46,6 +46,21 @@ export interface UserReaction {
   timestamp: string;
 }
 
+export interface UserAccessLog {
+  id: string;
+  userId: string;
+  userName: string;
+  userLogin: string;
+  userRole?: string;
+  userAvatar?: string;
+  loginAt: string; // Data e Hora do início da sessão (ISO)
+  lastActiveAt: string; // Data e Hora da última interação / heartbeat (ISO)
+  durationMinutes: number; // Tempo ativo conectado em minutos
+  status: 'online' | 'idle' | 'closed'; // online (<5m), idle (5-30m), closed (>30m ou logout)
+  deviceInfo: string; // Ex: "Computador Windows • Chrome" ou "Smartphone Android"
+  episodesHeard?: string[]; // Títulos de episódios ouvidos durante esta sessão
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -56,8 +71,17 @@ export interface UserProfile {
   avatar: string;
   myList: string[]; // series IDs
   reactions: Record<string, ReactionType>; // seriesId -> reaction
-  listenProgress: Record<string, { episodeId: string; currentTime: number; duration: number; completed: boolean; lastPlayed: string }>;
+  listenProgress: Record<string, {
+    episodeId: string;
+    currentTime: number;
+    duration: number;
+    completed: boolean;
+    lastPlayed: string;
+  }>;
   createdAt?: string;
+  lastLoginAt?: string; // Data e hora do último acesso registrado
+  lastActiveAt?: string; // Data e hora da última atividade registrada
+  totalAccessCount?: number; // Total acumulado de acessos/sessões
 }
 
 export interface SupabaseConfig {

@@ -30,12 +30,25 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
   const isInMyList = currentUser.myList.includes(series.id);
   const currentReaction = currentUser.reactions[series.id];
 
+  // Listen progress & completion calculation
+  const contentEpisodes = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0);
+  const totalContentCount = contentEpisodes.length || (seriesEpisodes.length || 1);
+  const completedEpisodesCount = seriesEpisodes.filter(e => currentUser.listenProgress[e.id]?.completed).length;
+  const inProgressEpisode = seriesEpisodes.find(e => {
+    const p = currentUser.listenProgress[e.id];
+    return p && !p.completed && p.currentTime > 5;
+  });
+  const hasStarted = completedEpisodesCount > 0 || Boolean(inProgressEpisode);
+  const isSeriesCompleted = completedEpisodesCount >= totalContentCount && totalContentCount > 0;
+  const seriesProgressPct = Math.min(100, Math.round((completedEpisodesCount / totalContentCount) * 100));
+
+  // Smart next episode to play: in-progress first, or next uncompleted, or synopsis
+  const smartEpisodeToPlay = inProgressEpisode || seriesEpisodes.find(e => !currentUser.listenProgress[e.id]?.completed) || synopsisEpisode || firstContentEpisode;
+
   const handlePlayFirst = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Play synopsis first if available, otherwise first episode
-    const toPlay = synopsisEpisode || firstContentEpisode;
-    if (toPlay) {
-      playEpisode(toPlay, series);
+    if (smartEpisodeToPlay) {
+      playEpisode(smartEpisodeToPlay, series);
     } else {
       openSeriesModal(series);
     }
@@ -75,7 +88,7 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
           }}
         />
 
-        {/* Quality and Total Episodes badge (replaces duration tag on Home screen) */}
+        {/* Quality and Total Episodes badge */}
         <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 z-10 flex items-center gap-1">
           <span className="px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/85 backdrop-blur-xs text-[#E50914] border border-[#E50914]/40">
             AUDIO
@@ -83,6 +96,20 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
           <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/85 backdrop-blur-xs text-neutral-200 border border-neutral-700">
             {trainingEpisodesCount > 0 ? `${trainingEpisodesCount} eps` : (seriesEpisodes.length > 0 ? `${seriesEpisodes.length} eps` : '10 eps')}
           </span>
+          {/* Visual Progress Badge on Card Top */}
+          {isSeriesCompleted ? (
+            <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-emerald-600/95 text-white border border-emerald-400/50 shadow flex items-center gap-0.5">
+              <Check className="w-2.5 h-2.5 stroke-[3]" /> Concluída
+            </span>
+          ) : completedEpisodesCount > 0 ? (
+            <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-[#E50914]/95 text-white shadow">
+              {completedEpisodesCount}/{totalContentCount} ouvidos
+            </span>
+          ) : inProgressEpisode ? (
+            <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-amber-500/95 text-black font-mono shadow flex items-center gap-0.5">
+              <Clock className="w-2.5 h-2.5" /> Ep. {inProgressEpisode.episodeNumber}
+            </span>
+          ) : null}
         </div>
 
         {/* Rating badge */}
@@ -98,6 +125,18 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
           <p className="text-[10px] sm:text-xs font-semibold text-neutral-300 truncate">{series.mentor}</p>
           <h4 className="text-xs sm:text-sm font-bold text-white truncate drop-shadow">{series.title}</h4>
         </div>
+
+        {/* Prominent Red/Green Evolution Progress Bar (YouTube/Netflix style) */}
+        {hasStarted && (
+          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-neutral-800/90 z-20 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                isSeriesCompleted ? 'bg-emerald-500' : 'bg-[#E50914]'
+              }`}
+              style={{ width: `${isSeriesCompleted ? 100 : Math.max(12, seriesProgressPct)}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Hover Card Overlay (Mini-Details) */}
@@ -111,6 +150,14 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#181818] via-transparent to-transparent" />
+            {hasStarted && (
+              <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-neutral-800 z-10">
+                <div
+                  className={`h-full ${isSeriesCompleted ? 'bg-emerald-500' : 'bg-[#E50914]'}`}
+                  style={{ width: `${isSeriesCompleted ? 100 : Math.max(12, seriesProgressPct)}%` }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Action Buttons Row */}
@@ -118,15 +165,22 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handlePlayFirst}
-                className="w-8 h-8 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center justify-center transition-transform active:scale-90"
-                title="Reproduzir Primeiro Episódio"
+                className="px-2.5 py-1.5 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center gap-1 text-xs font-bold transition-transform active:scale-90 shadow cursor-pointer"
+                title={inProgressEpisode ? `Continuar Ep. ${inProgressEpisode.episodeNumber}` : 'Ouvir Série'}
               >
-                <Play className="w-4 h-4 fill-black translate-x-0.5" />
+                <Play className="w-3.5 h-3.5 fill-black" />
+                <span>
+                  {inProgressEpisode
+                    ? `Retomar Ep. ${inProgressEpisode.episodeNumber}`
+                    : isSeriesCompleted
+                    ? 'Ouvir de novo'
+                    : 'Ouvir'}
+                </span>
               </button>
 
               <button
                 onClick={handleToggleList}
-                className="w-8 h-8 rounded-full border border-neutral-500 hover:border-white bg-[#2a2a2a] text-white flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full border border-neutral-500 hover:border-white bg-[#2a2a2a] text-white flex items-center justify-center transition-colors cursor-pointer"
                 title={isInMyList ? 'Remover da Minha Lista' : 'Adicionar à Minha Lista'}
               >
                 {isInMyList ? <Check className="w-4 h-4 text-emerald-400" /> : <Plus className="w-4 h-4" />}

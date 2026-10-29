@@ -33,6 +33,13 @@ export const SAMPLE_AUDIO_FALLBACKS = [
   'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
 ];
 
+export function formatSecondsToTime(seconds: number): string {
+  if (isNaN(seconds) || seconds < 0) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
 /**
  * Deeply analyzes an input URL to detect Google Drive formats, folders, or direct audio.
  */

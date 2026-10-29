@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { AudioSeries, AudioEpisode, UserProfile, ReactionType, SupabaseConfig } from '../types';
-import { INITIAL_SERIES, INITIAL_EPISODES, INITIAL_USERS } from '../data/initialData';
-import { resolveAudioUrl } from '../utils/audioResolver';
+import { AudioSeries, AudioEpisode, UserProfile, ReactionType, SupabaseConfig, UserAccessLog } from '../types';
+import { INITIAL_SERIES, INITIAL_EPISODES, INITIAL_USERS, INITIAL_ACCESS_LOGS } from '../data/initialData';
+import { resolveAudioUrl, formatSecondsToTime } from '../utils/audioResolver';
 import { encryptPassword, decryptPassword } from '../utils/crypto';
 import { getResolvedSupabaseConfig } from '../config/supabaseConfig';
 import {
@@ -64,6 +64,14 @@ interface AppContextType {
   pushToSupabaseCloud: () => Promise<{ ok: boolean; message: string }>;
   pullFromSupabaseCloud: () => Promise<{ ok: boolean; message: string }>;
 
+  // Access Logs & Presence (Auditoria de Sessões)
+  accessLogs: UserAccessLog[];
+  simulateTestAccess: (userName?: string, userLogin?: string) => void;
+  clearAccessLogs: () => void;
+
+  // Listen Progress & Completion Actions
+  toggleEpisodeCompleted: (episodeId: string) => void;
+
   // Actions
   playEpisode: (episode: AudioEpisode, series?: AudioSeries) => void;
   stopAudio: () => void;
@@ -109,6 +117,7 @@ const STORAGE_KEY_USERS = 'skills_on_users_v2';
 const STORAGE_KEY_CURRENT_USER_ID = 'skills_on_active_user_v2';
 const STORAGE_KEY_LOGGED_IN = 'skills_on_logged_in_v2';
 const STORAGE_KEY_SUPABASE = 'skills_on_supabase_v2';
+const STORAGE_KEY_ACCESS_LOGS = 'skills_on_access_logs_v2';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -245,13 +254,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isMobilePreview, setIsMobilePreview] = useState<boolean>(false);
   const toggleMobilePreview = () => setIsMobilePreview(prev => !prev);
 
+  // Client device helper for audit logs
+  const getClientDeviceSummary = (): string => {
+    if (typeof navigator === 'undefined') return 'Computador Desktop';
+    const ua = navigator.userAgent || '';
+    let device = 'Computador';
+    let browser = 'Chrome';
+
+    if (/iPhone|iPad|iPod/i.test(ua)) device = 'iPhone / iPad (iOS)';
+    else if (/Android/i.test(ua)) device = 'Smartphone Android';
+    else if (/Windows/i.test(ua)) device = 'Computador Windows';
+    else if (/Mac/i.test(ua)) device = 'MacBook / Mac';
+    else if (/Linux/i.test(ua)) device = 'Linux';
+
+    if (/Edg\//i.test(ua)) browser = 'Edge';
+    else if (/Chrome\//i.test(ua)) browser = 'Chrome';
+    else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = 'Safari';
+    else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+
+    return `${device} • ${browser}`;
+  };
+
+  // User access logs & session tracking (Auditoria de presença)
+  const [accessLogs, setAccessLogs] = useState<UserAccessLog[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_ACCESS_LOGS);
+      return saved ? JSON.parse(saved) : INITIAL_ACCESS_LOGS;
+    } catch {
+      return INITIAL_ACCESS_LOGS;
+    }
+  });
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const candidateUrlsRef = useRef<string[]>([]);
   const candidateIdxRef = useRef<number>(0);
   const isGoogleDriveRef = useRef<boolean>(false);
+  const lastTimeSaveRef = useRef<number>(0);
 
   // Current user derived
   const currentUser = allUsers.find(u => u.id === currentUserId) || allUsers[0];
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ACCESS_LOGS, JSON.stringify(accessLogs));
+    } catch (e) {
+      console.warn('Failed to save access logs', e);
+    }
+  }, [accessLogs]);
 
   // Persist state to LocalStorage
   useEffect(() => {
@@ -481,26 +530,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const onTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
       if (currentPlayingEpisode && audio.duration > 0) {
-        setAllUsers(prevUsers =>
-          prevUsers.map(user => {
-            if (user.id === currentUser.id) {
-              return {
-                ...user,
-                listenProgress: {
-                  ...user.listenProgress,
-                  [currentPlayingEpisode.id]: {
-                    episodeId: currentPlayingEpisode.id,
-                    currentTime: audio.currentTime,
-                    duration: audio.duration,
-                    completed: audio.currentTime / audio.duration > 0.9,
-                    lastPlayed: new Date().toISOString(),
+        const cur = audio.currentTime;
+        const dur = audio.duration;
+        const isNearEnd = cur / dur >= 0.90;
+        // Throttle updates: save if 3 seconds elapsed or near completion
+        if (Math.abs(cur - lastTimeSaveRef.current) >= 3 || isNearEnd) {
+          lastTimeSaveRef.current = cur;
+          setAllUsers(prevUsers =>
+            prevUsers.map(user => {
+              if (user.id === currentUser.id) {
+                const prevEntry = user.listenProgress[currentPlayingEpisode.id];
+                const wasCompleted = Boolean(prevEntry?.completed);
+                return {
+                  ...user,
+                  listenProgress: {
+                    ...user.listenProgress,
+                    [currentPlayingEpisode.id]: {
+                      episodeId: currentPlayingEpisode.id,
+                      currentTime: cur,
+                      duration: dur,
+                      completed: wasCompleted || isNearEnd,
+                      lastPlayed: new Date().toISOString(),
+                    },
                   },
-                },
-              };
-            }
-            return user;
-          })
-        );
+                };
+              }
+              return user;
+            })
+          );
+        }
       }
     };
 
@@ -525,6 +583,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const onEnded = () => {
       setIsPlaying(false);
+      if (currentPlayingEpisode) {
+        const epId = currentPlayingEpisode.id;
+        const dur = audio.duration > 0 ? audio.duration : ((currentPlayingEpisode.durationMinutes || 20) * 60);
+        const epTitle = currentPlayingEpisode.title;
+
+        const updatedProgress = {
+          episodeId: epId,
+          currentTime: dur,
+          duration: dur,
+          completed: true,
+          lastPlayed: new Date().toISOString(),
+        };
+
+        const updatedUser: UserProfile = {
+          ...currentUser,
+          listenProgress: {
+            ...currentUser.listenProgress,
+            [epId]: updatedProgress,
+          },
+        };
+
+        setAllUsers(prevUsers =>
+          prevUsers.map(u => (u.id === currentUser.id ? updatedUser : u))
+        );
+        updateUser(updatedUser).catch(console.warn);
+
+        // Update active session log with listened episode
+        setAccessLogs(prevLogs => {
+          if (prevLogs.length === 0) return prevLogs;
+          const currentLog = prevLogs[0];
+          if (currentLog.userId === currentUser.id) {
+            const heard = currentLog.episodesHeard || [];
+            if (!heard.includes(epTitle)) {
+              return [{ ...currentLog, episodesHeard: [...heard, epTitle] }, ...prevLogs.slice(1)];
+            }
+          }
+          return prevLogs;
+        });
+
+        setSyncNotification(`✓ Você concluiu o episódio "${epTitle}"! Registrado no seu histórico.`);
+      }
       nextEpisode();
     };
 
@@ -573,12 +672,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentPlayingEpisode, currentUser.id]);
 
-  // Play episode action with multi-candidate generation
+  // Play episode action with auto-resume and multi-candidate generation
   const playEpisode = (episode: AudioEpisode, targetSeries?: AudioSeries) => {
     const parentSeries = targetSeries || series.find(s => s.id === episode.seriesId) || null;
     setCurrentPlayingEpisode(episode);
     setCurrentPlayingSeries(parentSeries);
     setIsPlayerExpanded(true);
+
+    const savedProg = currentUser.listenProgress[episode.id];
+    const canResume = savedProg && !savedProg.completed && savedProg.currentTime > 5 && (savedProg.currentTime < (savedProg.duration || 999999) - 10);
 
     const resolved = resolveAudioUrl(episode.audioUrl);
     setAudioSourceInfo({
@@ -602,6 +704,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       audioRef.current.playbackRate = playbackRate;
       audioRef.current.volume = isMuted ? 0 : volume;
       audioRef.current.load();
+
+      const onCanPlayResume = () => {
+        if (canResume && audioRef.current && savedProg) {
+          audioRef.current.currentTime = savedProg.currentTime;
+          setCurrentTime(savedProg.currentTime);
+          setSyncNotification(`Retomando "${episode.title}" de onde você parou (${formatSecondsToTime(savedProg.currentTime)}).`);
+        }
+        audioRef.current?.removeEventListener('canplay', onCanPlayResume);
+      };
+      audioRef.current.addEventListener('canplay', onCanPlayResume);
+
       audioRef.current
         .play()
         .then(() => {
@@ -618,6 +731,143 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map(s => (s.id === parentSeries.id ? { ...s, totalListens: s.totalListens + 1 } : s))
       );
     }
+  };
+
+  // Heartbeat & Inactivity Presence Tracker (resolves overnight open tab concern!)
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    let lastInteractionTime = Date.now();
+    const markInteraction = () => {
+      lastInteractionTime = Date.now();
+    };
+
+    window.addEventListener('click', markInteraction);
+    window.addEventListener('keydown', markInteraction);
+    window.addEventListener('touchstart', markInteraction);
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const idleMinutes = (now - lastInteractionTime) / 60000;
+      const isVisible = typeof document !== 'undefined' ? document.visibilityState === 'visible' : true;
+      const isAudioPlaying = isPlaying;
+
+      setAccessLogs(prevLogs => {
+        if (prevLogs.length === 0) return prevLogs;
+        const currentSession = prevLogs[0];
+        if (currentSession.userId !== currentUser.id) return prevLogs;
+
+        // If inactive for > 30 minutes without audio playing: mark closed!
+        if (idleMinutes > 30 && !isAudioPlaying) {
+          if (currentSession.status !== 'closed') {
+            return [
+              { ...currentSession, status: 'closed' },
+              ...prevLogs.slice(1),
+            ];
+          }
+          return prevLogs;
+        }
+
+        // If backgrounded or no recent clicks for 10-30 min: status becomes 'idle'
+        const newStatus = (!isVisible && !isAudioPlaying) || idleMinutes > 10 ? 'idle' : 'online';
+        const loginTime = new Date(currentSession.loginAt).getTime();
+        const durationMinutes = Math.max(1, Math.round((now - loginTime) / 60000));
+
+        return [
+          {
+            ...currentSession,
+            lastActiveAt: new Date().toISOString(),
+            durationMinutes,
+            status: newStatus,
+          },
+          ...prevLogs.slice(1),
+        ];
+      });
+
+      // Update currentUser.lastActiveAt
+      setAllUsers(prev =>
+        prev.map(u =>
+          u.id === currentUser.id
+            ? { ...u, lastActiveAt: new Date().toISOString() }
+            : u
+        )
+      );
+    }, 45000);
+
+    return () => {
+      window.removeEventListener('click', markInteraction);
+      window.removeEventListener('keydown', markInteraction);
+      window.removeEventListener('touchstart', markInteraction);
+      clearInterval(interval);
+    };
+  }, [isLoggedIn, currentUser.id, isPlaying]);
+
+  // Manual toggle of episode completed status
+  const toggleEpisodeCompleted = (episodeId: string) => {
+    const targetEpisode = episodes.find(e => e.id === episodeId);
+    const existing = currentUser.listenProgress[episodeId];
+    const isCurrentlyCompleted = Boolean(existing?.completed);
+    const estimatedDuration = (targetEpisode?.durationMinutes ? targetEpisode.durationMinutes * 60 : 1200);
+    const totalDur = existing?.duration && existing.duration > 0 ? existing.duration : estimatedDuration;
+
+    const newProgressItem = isCurrentlyCompleted
+      ? {
+          episodeId,
+          currentTime: 0,
+          duration: totalDur,
+          completed: false,
+          lastPlayed: new Date().toISOString(),
+        }
+      : {
+          episodeId,
+          currentTime: totalDur,
+          duration: totalDur,
+          completed: true,
+          lastPlayed: new Date().toISOString(),
+        };
+
+    const updatedUser: UserProfile = {
+      ...currentUser,
+      listenProgress: {
+        ...currentUser.listenProgress,
+        [episodeId]: newProgressItem,
+      },
+    };
+
+    setAllUsers(prev => prev.map(u => (u.id === currentUser.id ? updatedUser : u)));
+    updateUser(updatedUser).catch(console.warn);
+
+    setSyncNotification(
+      isCurrentlyCompleted
+        ? `Episódio "${targetEpisode?.title || ''}" desmarcado como concluído.`
+        : `✓ Episódio "${targetEpisode?.title || ''}" marcado como concluído!`
+    );
+  };
+
+  const simulateTestAccess = (userName: string = 'Lucas Ribeiro (Aluno)', userLogin: string = 'lucas.aluno') => {
+    const nowIso = new Date().toISOString();
+    const demoLog: UserAccessLog = {
+      id: `session-sim-${Date.now()}`,
+      userId: `user-sim-${Math.random().toString(36).substring(2, 6)}`,
+      userName,
+      userLogin,
+      userRole: 'user',
+      userAvatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+      loginAt: nowIso,
+      lastActiveAt: nowIso,
+      durationMinutes: 1,
+      status: 'online',
+      deviceInfo: getClientDeviceSummary(),
+      episodesHeard: [],
+    };
+    setAccessLogs(prev => [demoLog, ...prev]);
+    setSyncNotification(`Sessão de teste criada para ${userName} (${userLogin})!`);
+  };
+
+  const clearAccessLogs = () => {
+    setAccessLogs([]);
+    localStorage.removeItem(STORAGE_KEY_ACCESS_LOGS);
+    setSyncNotification('Histórico de acessos limpo com sucesso.');
   };
 
   const toggleEmbedPlayer = (useEmbed?: boolean) => {
@@ -881,9 +1131,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     encryptUnprotectedPasswords();
   }, []);
 
-  // Login with Credentials: supports Login or Email + Password with cryptographic verification
+  // Login with Credentials: supports Login or Email + Password with cryptographic verification and session audit log
   const loginWithCredentials = async (loginOrEmail: string, pass: string): Promise<{ success: boolean; message?: string }> => {
     const cleanLogin = loginOrEmail.trim().toLowerCase();
+
+    const recordSessionOnLogin = (targetUser: UserProfile) => {
+      const nowIso = new Date().toISOString();
+      const newLog: UserAccessLog = {
+        id: `sess-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        userId: targetUser.id,
+        userName: targetUser.name,
+        userLogin: targetUser.login,
+        userAvatar: targetUser.avatar,
+        loginAt: nowIso,
+        lastActiveAt: nowIso,
+        durationMinutes: 1,
+        status: 'online',
+        deviceInfo: getClientDeviceSummary(),
+        episodesHeard: [],
+      };
+
+      setAccessLogs(prev => [newLog, ...prev.slice(0, 99)]);
+      setAllUsers(prev =>
+        prev.map(item =>
+          item.id === targetUser.id
+            ? {
+                ...item,
+                lastLoginAt: nowIso,
+                lastActiveAt: nowIso,
+                totalAccessCount: (item.totalAccessCount || 0) + 1,
+              }
+            : item
+        )
+      );
+    };
 
     for (const u of allUsers) {
       const matchLogin = u.login?.toLowerCase() === cleanLogin || u.email?.toLowerCase() === cleanLogin;
@@ -897,6 +1178,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (actualPassword === pass || u.password === pass) {
         setCurrentUserId(u.id);
         setIsLoggedIn(true);
+        recordSessionOnLogin(u);
         if (u.role === 'admin') {
           setCurrentView('admin');
         } else {
@@ -911,6 +1193,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const admin = allUsers.find(u => u.role === 'admin') || allUsers[0];
       setCurrentUserId(admin.id);
       setIsLoggedIn(true);
+      recordSessionOnLogin(admin);
       setCurrentView('admin');
       return { success: true };
     }
@@ -935,6 +1218,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             setCurrentUserId(cloudUser.id);
             setIsLoggedIn(true);
+            recordSessionOnLogin(cloudUser);
             setCurrentView(cloudUser.role === 'admin' ? 'admin' : 'home');
             return { success: true };
           }
@@ -957,6 +1241,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       audioRef.current.pause();
       setIsPlaying(false);
     }
+    // Mark active session as closed
+    setAccessLogs(prev =>
+      prev.map((log, idx) =>
+        idx === 0 && log.userId === currentUser.id && log.status !== 'closed'
+          ? { ...log, status: 'closed', lastActiveAt: new Date().toISOString() }
+          : log
+      )
+    );
   };
 
   const loginAs = (userId: string) => {
@@ -1333,6 +1625,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         pushToSupabaseCloud,
         pullFromSupabaseCloud,
         syncAllUsersToCloud,
+        accessLogs,
+        simulateTestAccess,
+        clearAccessLogs,
+        toggleEpisodeCompleted,
         playEpisode,
         stopAudio,
         closePlayerAndGoHome,

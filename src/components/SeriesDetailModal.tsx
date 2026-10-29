@@ -5,6 +5,7 @@ import {
   Play,
   Plus,
   Check,
+  CheckCircle2,
   ThumbsUp,
   ThumbsDown,
   Heart,
@@ -14,8 +15,10 @@ import {
   Radio,
   ExternalLink,
   Layers,
+  RotateCcw,
 } from 'lucide-react';
 import { AudioEpisode } from '../types';
+import { formatSecondsToTime } from '../utils/audioResolver';
 
 export const SeriesDetailModal: React.FC = () => {
   const {
@@ -27,6 +30,7 @@ export const SeriesDetailModal: React.FC = () => {
     toggleMyList,
     toggleReaction,
     toggleEpisodeReaction,
+    toggleEpisodeCompleted,
     series: allSeries,
     currentPlayingEpisode,
     isPlaying,
@@ -67,6 +71,17 @@ export const SeriesDetailModal: React.FC = () => {
 
   // Real training episodes (Episódio 1 em diante)
   const trainingEpisodes = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0);
+
+  // Completion metrics
+  const completedEpisodesCount = seriesEpisodes.filter(e => currentUser.listenProgress[e.id]?.completed).length;
+  const isSeriesCompleted = seriesEpisodes.length > 0 && completedEpisodesCount === seriesEpisodes.length;
+  const seriesProgressPct = seriesEpisodes.length > 0 ? Math.round((completedEpisodesCount / seriesEpisodes.length) * 100) : 0;
+
+  // Next episode to continue or resume
+  const inProgressEpisode = seriesEpisodes.find(e => {
+    const p = currentUser.listenProgress[e.id];
+    return p && !p.completed && p.currentTime > 5;
+  }) || seriesEpisodes.find(e => !currentUser.listenProgress[e.id]?.completed) || seriesEpisodes[0];
 
   const handlePlayEpisode = (episode: AudioEpisode) => {
     playEpisode(episode, series);
@@ -129,35 +144,81 @@ export const SeriesDetailModal: React.FC = () => {
               <span className="text-neutral-300 truncate">{series.category}</span>
             </div>
 
-            <h2 className="text-xl sm:text-2xl md:text-4xl font-extrabold tracking-tight text-white mb-3 sm:mb-4 drop-shadow-md">
+            <h2 className="text-xl sm:text-2xl md:text-4xl font-extrabold tracking-tight text-white mb-2 sm:mb-3 drop-shadow-md">
               {series.title}
             </h2>
 
-            {/* Actions Bar: SINOPSE (Áudio de Abertura) & EPISÓDIOS DA SÉRIE */}
+            {/* Series Overall Evolution Progress Bar */}
+            {seriesProgressPct > 0 && (
+              <div className="mb-3 max-w-sm sm:max-w-md bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-neutral-700/80 flex items-center gap-2.5 shadow-lg">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between text-[10px] sm:text-xs mb-1 font-semibold">
+                    <span className="text-neutral-300 flex items-center gap-1">
+                      {isSeriesCompleted ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400 font-bold">Série Totalmente Concluída</span>
+                        </>
+                      ) : (
+                        <span>Progresso do Aluno</span>
+                      )}
+                    </span>
+                    <span className={isSeriesCompleted ? 'text-emerald-400 font-bold' : 'text-[#E50914] font-bold'}>
+                      {completedEpisodesCount}/{seriesEpisodes.length} ouvidos ({seriesProgressPct}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-neutral-700/80 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        isSeriesCompleted ? 'bg-emerald-500' : 'bg-[#E50914]'
+                      }`}
+                      style={{ width: `${seriesProgressPct}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Actions Bar: CONTINUAR / SINOPSE / EPISÓDIOS */}
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              {/* Botão 1: SINOPSE (Primeiro áudio com explicação e detalhes da série) */}
+              {/* Botão Principal: Continuar ou Ouvir Próximo se houver progresso */}
+              {inProgressEpisode && (
+                <button
+                  onClick={() => handlePlayEpisode(inProgressEpisode)}
+                  className="flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded bg-[#E50914] hover:bg-[#b80710] text-white font-bold text-xs sm:text-base transition-all active:scale-95 shadow-lg shadow-[#E50914]/25 cursor-pointer"
+                  title={`Ouvir ${inProgressEpisode.title}`}
+                >
+                  <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white" />
+                  <span>
+                    {currentPlayingEpisode?.id === inProgressEpisode.id && isPlaying
+                      ? 'Reproduzindo Agora'
+                      : currentUser.listenProgress[inProgressEpisode.id]?.currentTime && !currentUser.listenProgress[inProgressEpisode.id]?.completed
+                      ? `Continuar Ep. ${inProgressEpisode.episodeNumber}`
+                      : isSeriesCompleted
+                      ? 'Ouvir Série Novamente'
+                      : `Episódio ${inProgressEpisode.episodeNumber}`}
+                  </span>
+                </button>
+              )}
+
+              {/* Botão: SINOPSE (Primeiro áudio com explicação e detalhes da série) */}
               <button
                 onClick={handlePlaySynopsis}
-                className="flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded bg-white hover:bg-neutral-200 text-black font-bold text-xs sm:text-base transition-all active:scale-95 shadow-lg cursor-pointer"
+                className="flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded bg-white/90 hover:bg-white text-black font-bold text-xs sm:text-base transition-all active:scale-95 shadow-lg cursor-pointer"
                 title="Ouvir o áudio de abertura com explicações e detalhes da série"
               >
-                <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-black" />
-                <span>
-                  {currentPlayingEpisode?.id === synopsisEpisode?.id && isPlaying
-                    ? 'Tocando Sinopse'
-                    : 'Sinopse'}
-                </span>
+                <Radio className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-black" />
+                <span>Sinopse</span>
               </button>
 
-              {/* Botão 2: EPISÓDIOS DA SÉRIE */}
+              {/* Botão: EPISÓDIOS DA SÉRIE */}
               <button
                 onClick={handleGoToEpisodes}
-                className="flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded bg-[#E50914] hover:bg-[#b80710] text-white font-bold text-xs sm:text-base transition-all active:scale-95 shadow-lg shadow-[#E50914]/20 cursor-pointer"
+                className="flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded bg-neutral-800/90 hover:bg-neutral-700 text-white font-bold text-xs sm:text-base transition-all active:scale-95 border border-neutral-700 cursor-pointer"
                 title="Ver a lista de episódios de treinamento e escolher qual ouvir"
               >
                 <Layers className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                <span className="hidden xs:inline">Episódios da Série</span>
-                <span className="xs:hidden">Episódios</span>
+                <span className="hidden xs:inline">Ver Episódios</span>
               </button>
 
               <button
@@ -207,7 +268,7 @@ export const SeriesDetailModal: React.FC = () => {
                 </button>
               </div>
 
-              {/* Likes counter badge for clarity */}
+              {/* Likes counter badge */}
               <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-900/80 border border-neutral-700 text-xs text-neutral-300">
                 <ThumbsUp className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="font-semibold text-white">{series.likes}</span>
@@ -356,8 +417,11 @@ export const SeriesDetailModal: React.FC = () => {
                     const isCurrent = currentPlayingEpisode?.id === episode.id;
                     const isEpSynopsis = Boolean(episode.isSynopsis || Number(episode.episodeNumber) === 0);
                     const progress = currentUser.listenProgress[episode.id];
-                    const progressPct = progress
-                      ? Math.min(100, (progress.currentTime / progress.duration) * 100)
+                    const isCompleted = Boolean(progress?.completed);
+                    const progressPct = isCompleted
+                      ? 100
+                      : progress && progress.duration > 0
+                      ? Math.min(100, Math.round((progress.currentTime / progress.duration) * 100))
                       : 0;
 
                     return (
@@ -366,7 +430,9 @@ export const SeriesDetailModal: React.FC = () => {
                         onClick={() => handlePlayEpisode(episode)}
                         className={`group flex flex-col md:flex-row items-start md:items-center justify-between p-3 sm:p-4 rounded-lg transition-all cursor-pointer border ${
                           isCurrent
-                            ? 'bg-neutral-800/90 border-[#E50914]/80 shadow-md'
+                            ? 'bg-neutral-800/90 border-[#E50914]/80 shadow-md ring-1 ring-[#E50914]/30'
+                            : isCompleted
+                            ? 'bg-neutral-900/70 border-emerald-900/50 hover:border-emerald-700/60'
                             : isEpSynopsis
                             ? 'bg-amber-950/20 hover:bg-amber-950/30 border-amber-500/30 hover:border-amber-500/50'
                             : 'bg-neutral-900/50 hover:bg-neutral-800/70 border-neutral-800/80 hover:border-neutral-700'
@@ -374,7 +440,7 @@ export const SeriesDetailModal: React.FC = () => {
                       >
                         {/* Left: Number + Thumbnail + Info */}
                         <div className="flex items-start md:items-center gap-2.5 sm:gap-4 w-full md:w-3/4">
-                          {/* Episode Number or INTRO Badge */}
+                          {/* Episode Number or INTRO Badge or Completed Check */}
                           {isEpSynopsis ? (
                             <div className="flex flex-col items-center justify-center shrink-0 w-8 sm:w-10 pt-1 md:pt-0">
                               <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 tracking-wider">
@@ -383,18 +449,38 @@ export const SeriesDetailModal: React.FC = () => {
                               <span className="text-[8px] text-amber-400/80 font-mono font-bold mt-0.5">EP. 0</span>
                             </div>
                           ) : (
-                            <span className="text-base sm:text-xl md:text-2xl font-bold text-neutral-500 group-hover:text-white transition-colors w-6 sm:w-8 text-center shrink-0 pt-1 md:pt-0">
-                              {episode.episodeNumber.toString().padStart(2, '0')}
-                            </span>
+                            <div className="flex flex-col items-center justify-center w-6 sm:w-8 shrink-0 pt-1 md:pt-0">
+                              <span className={`text-base sm:text-xl md:text-2xl font-bold transition-colors ${
+                                isCompleted ? 'text-emerald-400' : 'text-neutral-500 group-hover:text-white'
+                              }`}>
+                                {episode.episodeNumber.toString().padStart(2, '0')}
+                              </span>
+                            </div>
                           )}
 
                           {/* Thumbnail with Play Hover */}
-                          <div className="relative aspect-video w-24 sm:w-32 md:w-40 rounded overflow-hidden bg-neutral-800 shrink-0 border border-neutral-700/50">
+                          <div className="relative aspect-video w-24 sm:w-32 md:w-40 rounded overflow-hidden bg-neutral-800 shrink-0 border border-neutral-700/50 shadow-inner">
                             <img
                               src={episode.imageUrl || series.posterImage}
                               alt={episode.title}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             />
+
+                            {/* Completed Badge on Thumbnail */}
+                            {isCompleted && (
+                              <div className="absolute top-1 left-1 bg-emerald-600/95 backdrop-blur text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1 shadow-md z-10">
+                                <CheckCircle2 className="w-2.5 h-2.5" />
+                                <span>Ouvido</span>
+                              </div>
+                            )}
+
+                            {/* In-progress badge on Thumbnail */}
+                            {!isCompleted && progress && progress.currentTime > 5 && (
+                              <div className="absolute top-1 left-1 bg-black/85 backdrop-blur text-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 shadow-md z-10">
+                                <Clock className="w-2.5 h-2.5" />
+                                <span>{formatSecondsToTime(progress.currentTime)}</span>
+                              </div>
+                            )}
 
                             {/* Play overlay button */}
                             <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
@@ -405,11 +491,13 @@ export const SeriesDetailModal: React.FC = () => {
                               </div>
                             </div>
 
-                            {/* Listen progress bar in thumbnail bottom */}
+                            {/* Listen progress bar on thumbnail bottom (Red / Emerald like YouTube) */}
                             {progressPct > 0 && (
-                              <div className="absolute bottom-0 left-0 right-0 h-1 bg-neutral-700">
+                              <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/70">
                                 <div
-                                  className="h-full bg-[#E50914]"
+                                  className={`h-full transition-all duration-300 ${
+                                    isCompleted ? 'bg-emerald-500' : 'bg-[#E50914]'
+                                  }`}
                                   style={{ width: `${progressPct}%` }}
                                 />
                               </div>
@@ -429,11 +517,28 @@ export const SeriesDetailModal: React.FC = () => {
                                   Episódio {episode.episodeNumber}
                                 </span>
                               )}
+
+                              {/* Progress Status Pill */}
+                              {isCompleted && (
+                                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-600/40 flex items-center gap-1 shrink-0">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  <span>Concluído</span>
+                                </span>
+                              )}
+
+                              {!isCompleted && progress && progress.currentTime > 5 && (
+                                <span className="text-[9px] sm:text-[10px] font-bold text-amber-300 bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-600/40 flex items-center gap-1 shrink-0">
+                                  <Clock className="w-2.5 h-2.5 text-amber-400" />
+                                  <span>Parou em {formatSecondsToTime(progress.currentTime)} ({progressPct}%)</span>
+                                </span>
+                              )}
+
                               <h4 className={`text-xs sm:text-sm md:text-base font-bold transition-colors line-clamp-1 ${
                                 isCurrent ? 'text-[#E50914]' : isEpSynopsis ? 'text-amber-100' : 'text-white group-hover:text-neutral-100'
                               }`}>
                                 {episode.title}
                               </h4>
+
                               {isCurrent && isPlaying && (
                                 <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#E50914] bg-[#E50914]/20 px-1.5 py-0.5 rounded border border-[#E50914]/40 flex items-center gap-1 shrink-0">
                                   <Radio className="w-2.5 h-2.5 animate-pulse" />
@@ -447,8 +552,8 @@ export const SeriesDetailModal: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Right: Likes, Duration & Listen Button */}
-                        <div className="mt-2.5 md:mt-0 flex items-center justify-between md:justify-end gap-2.5 sm:gap-3.5 w-full md:w-auto shrink-0 pl-8 sm:pl-12 md:pl-0">
+                        {/* Right: Likes, Duration, Mark Completed & Listen Button */}
+                        <div className="mt-2.5 md:mt-0 flex items-center justify-between md:justify-end gap-2 sm:gap-3 w-full md:w-auto shrink-0 pl-8 sm:pl-12 md:pl-0">
                           {/* Individual Episode Reaction (independent per episode) */}
                           <div className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded-full border border-neutral-800">
                             <button
@@ -491,23 +596,64 @@ export const SeriesDetailModal: React.FC = () => {
                             </button>
                           </div>
 
-                          <div className="flex items-center gap-1 text-[11px] sm:text-xs md:text-sm font-semibold text-neutral-400">
+                          {/* Manual Toggle Mark As Completed Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleEpisodeCompleted(episode.id);
+                            }}
+                            className={`p-1.5 rounded-full transition-all border cursor-pointer active:scale-90 ${
+                              isCompleted
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 hover:bg-emerald-500/30'
+                                : 'bg-neutral-800/80 border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500'
+                            }`}
+                            title={isCompleted ? 'Desmarcar como concluído' : 'Marcar manualmente como ouvido'}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </button>
+
+                          {/* Duration */}
+                          <div className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-neutral-400 shrink-0">
                             <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                             <span>{episode.durationFormatted || `${episode.durationMinutes} min`}</span>
                           </div>
 
+                          {/* Smart Play Button */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handlePlayEpisode(episode);
                             }}
-                            className={`px-3 py-1.5 rounded text-xs font-bold text-white transition-colors border cursor-pointer active:scale-95 ${
-                              isEpSynopsis
+                            className={`px-3 py-1.5 rounded text-xs font-bold text-white transition-all border cursor-pointer active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                              isCurrent && isPlaying
+                                ? 'bg-[#E50914] border-[#E50914] shadow-md'
+                                : isCompleted
+                                ? 'bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-200'
+                                : !isCompleted && progress && progress.currentTime > 5
+                                ? 'bg-[#E50914] hover:bg-[#b80710] border-[#E50914] shadow-sm'
+                                : isEpSynopsis
                                 ? 'bg-amber-600 hover:bg-amber-500 border-amber-500/50'
                                 : 'bg-neutral-800 hover:bg-[#E50914] border-neutral-700'
                             }`}
                           >
-                            {isCurrent && isPlaying ? 'Pausar' : isEpSynopsis ? 'Ouvir Sinopse' : 'Ouvir'}
+                            {isCurrent && isPlaying ? (
+                              <span>Pausar</span>
+                            ) : isCompleted ? (
+                              <>
+                                <RotateCcw className="w-3 h-3 text-neutral-400" />
+                                <span>Ouvir de novo</span>
+                              </>
+                            ) : !isCompleted && progress && progress.currentTime > 5 ? (
+                              <>
+                                <Play className="w-3 h-3 fill-white" />
+                                <span>Continuar ({formatSecondsToTime(progress.currentTime)})</span>
+                              </>
+                            ) : isEpSynopsis ? (
+                              <span>Ouvir Sinopse</span>
+                            ) : (
+                              <span>Ouvir</span>
+                            )}
                           </button>
                         </div>
                       </div>

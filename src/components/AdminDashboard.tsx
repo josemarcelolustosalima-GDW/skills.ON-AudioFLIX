@@ -72,9 +72,14 @@ export const AdminDashboard: React.FC = () => {
     pushToSupabaseCloud,
     pullFromSupabaseCloud,
     syncAllUsersToCloud,
+    accessLogs,
+    simulateTestAccess,
+    clearAccessLogs,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'supabase'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'access_logs' | 'supabase'>('analytics');
+  const [accessSearch, setAccessSearch] = useState('');
+  const [accessStatusFilter, setAccessStatusFilter] = useState<'all' | 'online' | 'today' | 'closed'>('all');
   const [copiedSql, setCopiedSql] = useState(false);
   const [copiedRlsFix, setCopiedRlsFix] = useState(false);
   const [syncUrl, setSyncUrl] = useState<string>('');
@@ -104,11 +109,76 @@ export const AdminDashboard: React.FC = () => {
   const [decryptedPasswords, setDecryptedPasswords] = useState<Record<string, string>>({});
   const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
 
+  // Helpers for access log formatting
+  const formatAccessDate = (isoString?: string) => {
+    if (!isoString) return '-';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString.split('T')[0] || isoString;
+      return d.toLocaleDateString('pt-BR');
+    } catch {
+      return isoString.split('T')[0] || isoString;
+    }
+  };
+
+  const formatAccessTime = (isoString?: string) => {
+    if (!isoString) return '-';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString.split('T')[1]?.substring(0, 8) || isoString;
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return isoString.split('T')[1]?.substring(0, 8) || isoString;
+    }
+  };
+
+  const isToday = (isoString?: string) => {
+    if (!isoString) return false;
+    try {
+      const d = new Date(isoString);
+      const today = new Date();
+      return (
+        d.getDate() === today.getDate() &&
+        d.getMonth() === today.getMonth() &&
+        d.getFullYear() === today.getFullYear()
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  // CSV Export for Access Logs
+  const handleExportAccessLogsCsv = () => {
+    const headers = ['ID', 'Aluno', 'Login', 'Perfil', 'Data Acesso', 'Hora Entrada', 'Ultima Atividade', 'Duracao Minutos', 'Status', 'Dispositivo', 'Episodios Ouvidos'];
+    const rows = accessLogs.map(l => [
+      l.id,
+      `"${(l.userName || '').replace(/"/g, '""')}"`,
+      l.userLogin,
+      l.userRole || 'user',
+      formatAccessDate(l.loginAt),
+      formatAccessTime(l.loginAt),
+      formatAccessTime(l.lastActiveAt),
+      l.durationMinutes,
+      l.status,
+      `"${(l.deviceInfo || '').replace(/"/g, '""')}"`,
+      `"${((l.episodesHeard || []).join('; ')).replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `skills_on_relatorio_acessos_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Analytics Metrics
   const totalLikes = series.reduce((acc, s) => acc + s.likes, 0);
   const totalUnlikes = series.reduce((acc, s) => acc + s.unlikes, 0);
   const totalListens = series.reduce((acc, s) => acc + s.totalListens, 0);
   const overallApproval = totalLikes + totalUnlikes > 0 ? Math.round((totalLikes / (totalLikes + totalUnlikes)) * 100) : 100;
+  const onlineUsersCount = accessLogs.filter(l => l.status === 'online').length;
 
   // Toggle password visibility for user row (decrypts with AES-256)
   const togglePasswordVisibility = async (userId: string, rawPassword: string) => {
@@ -327,6 +397,24 @@ export const AdminDashboard: React.FC = () => {
         >
           <Users className="w-4 h-4" />
           <span>Gestão de Usuários & Senhas ({allUsers.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('access_logs')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${
+            activeTab === 'access_logs'
+              ? 'bg-[#E50914] text-white shadow-lg shadow-[#E50914]/25'
+              : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          <span>Controle de Acessos ⏱️</span>
+          {onlineUsersCount > 0 && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+          )}
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-black/40 font-mono">
+            {accessLogs.length}
+          </span>
         </button>
 
         <button
@@ -634,6 +722,397 @@ export const AdminDashboard: React.FC = () => {
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CONTENT TAB: ACCESS LOGS & SESSION AUDIT (REQUIREMENT: CONTROLE DE ACESSO DOS USUÁRIOS) */}
+      {activeTab === 'access_logs' && (
+        <div className="py-6 space-y-6 animate-in fade-in duration-200">
+          {/* Header & Action Buttons */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  Auditoria de Sessões em Tempo Real
+                </span>
+                <span className="text-xs text-neutral-400">Proteção & Rastreabilidade</span>
+              </div>
+              <h2 className="text-xl md:text-2xl font-extrabold text-white flex items-center gap-2">
+                <span>Controle de Acessos dos Usuários</span>
+              </h2>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                Rastreamento cronológico de data, hora de entrada, permanência ativa, dispositivo e episódios consumidos por cada aluno.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => simulateTestAccess()}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold border border-neutral-700 transition-colors shadow-sm cursor-pointer"
+                title="Gera um registro de login de teste para verificar a tabela"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Simular Acesso de Teste</span>
+              </button>
+
+              <button
+                onClick={handleExportAccessLogsCsv}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold border border-neutral-700 transition-colors shadow-sm cursor-pointer"
+                title="Baixar planilha CSV com todo o histórico de acessos"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Exportar Relatório CSV</span>
+              </button>
+
+              {accessLogs.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm('Deseja limpar todo o histórico de logs de acesso? Esta ação não pode ser desfeita.')) {
+                      clearAccessLogs();
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-red-400 text-xs font-semibold border border-neutral-800 transition-colors"
+                  title="Limpar histórico"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Limpar Logs</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Metrics KPI Cards */}
+          {(() => {
+            const onlineCount = accessLogs.filter(l => l.status === 'online').length;
+            const todayCount = accessLogs.filter(l => isToday(l.loginAt)).length;
+            const totalSessions = accessLogs.length;
+            const avgDuration = totalSessions > 0
+              ? Math.round(accessLogs.reduce((acc, l) => acc + (l.durationMinutes || 1), 0) / totalSessions)
+              : 0;
+
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                <div className="bg-neutral-900/90 border border-emerald-500/40 rounded-xl p-4 shadow-lg flex items-center gap-3 relative overflow-hidden">
+                  <div className="p-3 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+                    <UserCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-neutral-400 font-semibold block uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      Online Agora
+                    </span>
+                    <span className="text-xl sm:text-2xl font-black text-white">{onlineCount}</span>
+                  </div>
+                </div>
+
+                <div className="bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 shadow-lg flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-blue-500/20 text-blue-400 shrink-0">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-neutral-400 font-semibold block uppercase tracking-wider">Acessos Hoje</span>
+                    <span className="text-xl sm:text-2xl font-black text-white">{todayCount}</span>
+                  </div>
+                </div>
+
+                <div className="bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 shadow-lg flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-purple-500/20 text-purple-400 shrink-0">
+                    <BarChart3 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-neutral-400 font-semibold block uppercase tracking-wider">Total de Sessões</span>
+                    <span className="text-xl sm:text-2xl font-black text-white">{totalSessions}</span>
+                  </div>
+                </div>
+
+                <div className="bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 shadow-lg flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-neutral-400 font-semibold block uppercase tracking-wider">Tempo Médio</span>
+                    <span className="text-xl sm:text-2xl font-black text-white">{avgDuration} min</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* EXPLANATORY BANNER: OVERNIGHT / IDLE TAB ARCHITECTURE (RESPOSTA À DÚVIDA DO ADMIN) */}
+          <div className="bg-gradient-to-r from-neutral-900 via-neutral-900/95 to-neutral-950 border border-amber-500/40 rounded-xl p-4 sm:p-5 shadow-lg relative">
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5 border border-amber-500/30">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="space-y-1.5 text-xs text-neutral-300">
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>Como o sistema gerencia sessões quando o aluno deixa o APP aberto até o dia seguinte?</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                    Solução Ativa
+                  </span>
+                </h4>
+                <p className="leading-relaxed text-neutral-300">
+                  Para evitar registros irreais de <strong>24h ou 48h ininterruptas</strong> quando o aluno não fecha o navegador ou a aba do celular, implementamos uma arquitetura de <strong>Heartbeat (batimento de presença) a cada 45 segundos</strong>:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-2">
+                  <div className="bg-neutral-950/70 p-2.5 rounded-lg border border-neutral-800">
+                    <span className="text-amber-400 font-bold block mb-1">1. Encerramento por Inatividade (30 min)</span>
+                    <p className="text-[11px] text-neutral-400 leading-normal">
+                      Se o aluno parar de clicar e nenhum áudio estiver tocando por mais de 30 minutos, a sessão é finalizada com o horário exato da última ação dele.
+                    </p>
+                  </div>
+                  <div className="bg-neutral-950/70 p-2.5 rounded-lg border border-neutral-800">
+                    <span className="text-blue-400 font-bold block mb-1">2. Retorno no Dia Seguinte</span>
+                    <p className="text-[11px] text-neutral-400 leading-normal">
+                      Quando ele acordar e voltar a interagir com o app, uma <strong>nova linha de sessão</strong> é gerada automaticamente, sem misturar os dias.
+                    </p>
+                  </div>
+                  <div className="bg-neutral-950/70 p-2.5 rounded-lg border border-neutral-800">
+                    <span className="text-emerald-400 font-bold block mb-1">3. Proteção durante Reprodução</span>
+                    <p className="text-[11px] text-neutral-400 leading-normal">
+                      Enquanto um episódio de áudio estiver tocando, a sessão permanece ativa e registra todos os episódios ouvidos na mentoria.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Search Bar & Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-neutral-900/60 p-3 rounded-xl border border-neutral-800">
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                placeholder="Buscar por nome do aluno, login ou dispositivo..."
+                value={accessSearch}
+                onChange={(e) => setAccessSearch(e.target.value)}
+                className="w-full bg-neutral-950 text-white text-xs rounded-lg pl-3 pr-8 py-2.5 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
+              />
+              {accessSearch && (
+                <button
+                  onClick={() => setAccessSearch('')}
+                  className="absolute right-2.5 top-2.5 text-neutral-400 hover:text-white text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <button
+                onClick={() => setAccessStatusFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 ${
+                  accessStatusFilter === 'all'
+                    ? 'bg-[#E50914] text-white'
+                    : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                }`}
+              >
+                Todos ({accessLogs.length})
+              </button>
+
+              <button
+                onClick={() => setAccessStatusFilter('online')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0 ${
+                  accessStatusFilter === 'online'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span>Online Agora ({accessLogs.filter(l => l.status === 'online').length})</span>
+              </button>
+
+              <button
+                onClick={() => setAccessStatusFilter('today')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 ${
+                  accessStatusFilter === 'today'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                }`}
+              >
+                Hoje ({accessLogs.filter(l => isToday(l.loginAt)).length})
+              </button>
+
+              <button
+                onClick={() => setAccessStatusFilter('closed')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 ${
+                  accessStatusFilter === 'closed'
+                    ? 'bg-neutral-700 text-white'
+                    : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                }`}
+              >
+                Finalizados ({accessLogs.filter(l => l.status === 'closed').length})
+              </button>
+            </div>
+          </div>
+
+          {/* Access Logs Table */}
+          {(() => {
+            const filteredLogs = accessLogs.filter(log => {
+              const matchesSearch =
+                (log.userName || '').toLowerCase().includes(accessSearch.toLowerCase()) ||
+                (log.userLogin || '').toLowerCase().includes(accessSearch.toLowerCase()) ||
+                (log.deviceInfo || '').toLowerCase().includes(accessSearch.toLowerCase());
+              if (!matchesSearch) return false;
+              if (accessStatusFilter === 'online') return log.status === 'online';
+              if (accessStatusFilter === 'closed') return log.status === 'closed';
+              if (accessStatusFilter === 'today') return isToday(log.loginAt);
+              return true;
+            });
+
+            return (
+              <div className="bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden shadow-xl">
+                <div className="overflow-x-auto visible-scrollbar">
+                  <table className="w-full text-left text-xs text-neutral-300">
+                    <thead className="bg-neutral-950/80 text-[11px] font-bold text-neutral-400 uppercase tracking-wider border-b border-neutral-800">
+                      <tr>
+                        <th className="py-3 px-4">Aluno / Usuário</th>
+                        <th className="py-3 px-4">Data do Acesso</th>
+                        <th className="py-3 px-4">Hora de Entrada</th>
+                        <th className="py-3 px-4">Última Atividade / Saída</th>
+                        <th className="py-3 px-4">Duração Ativa</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Dispositivo</th>
+                        <th className="py-3 px-4">Episódios Ouvidos na Sessão</th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-neutral-800/60 font-medium">
+                      {filteredLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-neutral-500">
+                            Nenhum registro de acesso encontrado para os filtros selecionados.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredLogs.map((log) => {
+                          const isOnline = log.status === 'online';
+
+                          return (
+                            <tr
+                              key={log.id}
+                              className={`transition-colors ${
+                                isOnline
+                                  ? 'bg-emerald-950/15 hover:bg-emerald-950/25'
+                                  : 'hover:bg-neutral-800/40'
+                              }`}
+                            >
+                              {/* Aluno / Usuário */}
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center font-bold text-white text-xs shrink-0">
+                                    {log.userName ? log.userName.charAt(0).toUpperCase() : 'U'}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-white leading-tight">{log.userName}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className="font-mono text-[10px] bg-neutral-800/80 px-1.5 py-0.5 rounded text-neutral-300 border border-neutral-700/60">
+                                        @{log.userLogin}
+                                      </span>
+                                      <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                                        (log.userRole || 'user') === 'admin'
+                                          ? 'bg-[#E50914]/20 text-[#E50914]'
+                                          : 'bg-blue-500/20 text-blue-400'
+                                      }`}>
+                                        {log.userRole || 'aluno'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Data do Acesso */}
+                              <td className="py-3.5 px-4 font-mono text-neutral-200">
+                                <span className="bg-neutral-800/70 px-2 py-1 rounded border border-neutral-700/60">
+                                  {formatAccessDate(log.loginAt)}
+                                </span>
+                              </td>
+
+                              {/* Hora de Entrada */}
+                              <td className="py-3.5 px-4 font-mono text-white font-semibold">
+                                <div className="flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>{formatAccessTime(log.loginAt)}</span>
+                                </div>
+                              </td>
+
+                              {/* Última Atividade / Saída */}
+                              <td className="py-3.5 px-4 font-mono text-neutral-300">
+                                <div className="flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-neutral-500" />
+                                  <span>{formatAccessTime(log.lastActiveAt)}</span>
+                                </div>
+                              </td>
+
+                              {/* Duração Ativa */}
+                              <td className="py-3.5 px-4">
+                                <span className="px-2 py-0.5 rounded bg-neutral-800 font-bold text-amber-300 border border-neutral-700">
+                                  {log.durationMinutes} min
+                                </span>
+                              </td>
+
+                              {/* Status */}
+                              <td className="py-3.5 px-4">
+                                {isOnline ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span>Online Agora</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium bg-neutral-800 text-neutral-400 border border-neutral-700">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
+                                    <span>Sessão Finalizada</span>
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Dispositivo */}
+                              <td className="py-3.5 px-4 text-neutral-400 max-w-[150px] truncate" title={log.deviceInfo}>
+                                <span className="text-[11px] bg-neutral-800/40 px-2 py-1 rounded border border-neutral-800 font-mono">
+                                  {log.deviceInfo || 'Navegador Web'}
+                                </span>
+                              </td>
+
+                              {/* Episódios Ouvidos */}
+                              <td className="py-3.5 px-4">
+                                {log.episodesHeard && log.episodesHeard.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1 max-w-[220px]">
+                                    {log.episodesHeard.map((epTitle, idx) => (
+                                      <span
+                                        key={idx}
+                                        className="text-[10px] font-semibold bg-neutral-800 text-neutral-200 px-2 py-0.5 rounded border border-neutral-700 truncate max-w-[200px]"
+                                        title={epTitle}
+                                      >
+                                        🎧 {epTitle}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-neutral-500 text-[11px] italic">
+                                    Navegação no catálogo
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="px-4 py-3 bg-neutral-950/80 border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-400 gap-2">
+                  <span>
+                    Exibindo <strong>{filteredLogs.length}</strong> de <strong>{accessLogs.length}</strong> sessões registradas
+                  </span>
+                  <span className="text-[11px] text-neutral-500">
+                    Sincronização persistente com Supabase (tabela: public.access_logs) & Armazenamento Local
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { AudioSeries, AudioEpisode, UserProfile } from '../types';
+import { AudioSeries, AudioEpisode, UserProfile, UserAccessLog } from '../types';
 
 export const INITIAL_SERIES: AudioSeries[] = [
   {
@@ -339,6 +339,9 @@ export const INITIAL_USERS: UserProfile[] = [
     listenProgress: {
       'ep-lead-1': { episodeId: 'ep-lead-1', currentTime: 450, duration: 1320, completed: false, lastPlayed: '2026-10-24T14:10:00Z' },
     },
+    lastLoginAt: '2026-10-29T10:15:00Z',
+    lastActiveAt: '2026-10-29T11:10:00Z',
+    totalAccessCount: 14,
     createdAt: '2026-01-01T00:00:00Z',
   },
   {
@@ -355,10 +358,55 @@ export const INITIAL_USERS: UserProfile[] = [
       'series-negotiation': 'like',
     },
     listenProgress: {
-      'ep-lead-1': { episodeId: 'ep-lead-1', currentTime: 1320, duration: 1320, completed: true, lastPlayed: '2026-10-23T18:20:00Z' },
-      'ep-lead-2': { episodeId: 'ep-lead-2', currentTime: 320, duration: 1140, completed: false, lastPlayed: '2026-10-24T09:40:00Z' },
+      'ep-lead-1': { episodeId: 'ep-lead-1', currentTime: 1320, duration: 1320, completed: true, lastPlayed: '2026-10-28T18:20:00Z' },
+      'ep-lead-2': { episodeId: 'ep-lead-2', currentTime: 750, duration: 1140, completed: false, lastPlayed: '2026-10-29T12:40:00Z' },
     },
+    lastLoginAt: '2026-10-29T12:30:00Z',
+    lastActiveAt: '2026-10-29T13:05:00Z',
+    totalAccessCount: 8,
     createdAt: '2026-01-02T00:00:00Z',
+  },
+];
+
+export const INITIAL_ACCESS_LOGS: UserAccessLog[] = [
+  {
+    id: 'session-demo-1',
+    userId: 'user-student',
+    userName: 'José Marcelo (Aluno)',
+    userLogin: 'aluno',
+    userAvatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+    loginAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+    lastActiveAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    durationMinutes: 23,
+    status: 'online',
+    deviceInfo: 'Computador Windows • Chrome 122',
+    episodesHeard: ['Sinopse: Introdução ao High Stakes Leadership', 'Ep. 01: O Dilema do Primeiro Minuto'],
+  },
+  {
+    id: 'session-demo-2',
+    userId: 'user-admin',
+    userName: 'skills.ON! Administrador',
+    userLogin: 'skills.on.admin',
+    userAvatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+    loginAt: new Date(Date.now() - 95 * 60 * 1000).toISOString(),
+    lastActiveAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+    durationMinutes: 55,
+    status: 'closed',
+    deviceInfo: 'MacBook Pro • Safari 17',
+    episodesHeard: ['Ep. 01: O Dilema do Primeiro Minuto', 'Ep. 02: Comando Descentralizado'],
+  },
+  {
+    id: 'session-demo-3',
+    userId: 'user-student',
+    userName: 'José Marcelo (Aluno)',
+    userLogin: 'aluno',
+    userAvatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+    loginAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+    lastActiveAt: new Date(Date.now() - 23.2 * 3600 * 1000).toISOString(),
+    durationMinutes: 48,
+    status: 'closed',
+    deviceInfo: 'Smartphone Android • Chrome Mobile',
+    episodesHeard: ['Ep. 01: O Dilema do Primeiro Minuto'],
   },
 ];
 
@@ -430,15 +478,39 @@ create table if not exists public.users (
   my_list text[] default '{}',
   reactions jsonb default '{}'::jsonb,
   listen_progress jsonb default '{}'::jsonb,
+  last_login_at timestamp with time zone default timezone('utc'::text, now()),
+  last_active_at timestamp with time zone default timezone('utc'::text, now()),
+  total_access_count integer default 1,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- 5. Permissões de Leitura e Gravação (RLS)
+-- Garantir colunas de auditoria de acesso se a tabela já existir:
+alter table public.users add column if not exists last_login_at timestamp with time zone default timezone('utc'::text, now());
+alter table public.users add column if not exists last_active_at timestamp with time zone default timezone('utc'::text, now());
+alter table public.users add column if not exists total_access_count integer default 1;
+
+-- 5. Tabela de Logs de Acesso e Auditoria de Sessões dos Usuários
+create table if not exists public.access_logs (
+  id text primary key,
+  user_id text references public.users(id) on delete cascade,
+  user_name text not null,
+  user_login text not null,
+  login_at timestamp with time zone default timezone('utc'::text, now()),
+  last_active_at timestamp with time zone default timezone('utc'::text, now()),
+  duration_minutes integer default 1,
+  status text default 'online',
+  device_info text,
+  episodes_heard text[] default '{}',
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 6. Permissões de Leitura e Gravação (RLS)
 -- Liberar Leitura, Inserção, Atualização e Exclusão para sincronização direta do aplicativo:
 alter table public.series disable row level security;
 alter table public.episodes disable row level security;
 alter table public.user_reactions disable row level security;
 alter table public.users disable row level security;
+alter table public.access_logs disable row level security;
 
 -- Políticas de segurança permissivas (caso o RLS permaneça ativado):
 drop policy if exists "Allow public read series" on public.series;
@@ -456,9 +528,12 @@ create policy "Allow all on reactions" on public.user_reactions for all using (t
 
 drop policy if exists "Allow all on users" on public.users;
 create policy "Allow all on users" on public.users for all using (true) with check (true);
+
+drop policy if exists "Allow all on access_logs" on public.access_logs;
+create policy "Allow all on access_logs" on public.access_logs for all using (true) with check (true);
 `;
 
-export const SUPABASE_RLS_FIX_SQL = `-- Correção Rápida de Permissão (RLS 42501), Tabela de Usuários e Sinopse
+export const SUPABASE_RLS_FIX_SQL = `-- Correção Rápida de Permissão (RLS 42501), Tabela de Usuários, Auditoria e Sinopse
 -- Cole e execute no SQL Editor do Supabase para destravar o Upload e Reconhecimento de Usuários:
 
 create table if not exists public.users (
@@ -472,6 +547,23 @@ create table if not exists public.users (
   my_list text[] default '{}',
   reactions jsonb default '{}'::jsonb,
   listen_progress jsonb default '{}'::jsonb,
+  last_login_at timestamp with time zone default timezone('utc'::text, now()),
+  last_active_at timestamp with time zone default timezone('utc'::text, now()),
+  total_access_count integer default 1,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+create table if not exists public.access_logs (
+  id text primary key,
+  user_id text references public.users(id) on delete cascade,
+  user_name text not null,
+  user_login text not null,
+  login_at timestamp with time zone default timezone('utc'::text, now()),
+  last_active_at timestamp with time zone default timezone('utc'::text, now()),
+  duration_minutes integer default 1,
+  status text default 'online',
+  device_info text,
+  episodes_heard text[] default '{}',
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -479,22 +571,15 @@ alter table public.series disable row level security;
 alter table public.episodes disable row level security;
 alter table public.user_reactions disable row level security;
 alter table public.users disable row level security;
+alter table public.access_logs disable row level security;
 
 alter table public.episodes add column if not exists is_synopsis boolean default false;
-
-drop policy if exists "Allow public read series" on public.series;
-drop policy if exists "Allow all on series" on public.series;
-create policy "Allow all on series" on public.series for all using (true) with check (true);
-
-drop policy if exists "Allow public read episodes" on public.episodes;
-drop policy if exists "Allow all on episodes" on public.episodes;
-create policy "Allow all on episodes" on public.episodes for all using (true) with check (true);
-
-drop policy if exists "Allow public read reactions" on public.user_reactions;
-drop policy if exists "Allow authenticated insert reactions" on public.user_reactions;
-drop policy if exists "Allow all on reactions" on public.user_reactions;
-create policy "Allow all on reactions" on public.user_reactions for all using (true) with check (true);
+alter table public.users add column if not exists last_login_at timestamp with time zone default timezone('utc'::text, now());
+alter table public.users add column if not exists last_active_at timestamp with time zone default timezone('utc'::text, now());
+alter table public.users add column if not exists total_access_count integer default 1;
 
 drop policy if exists "Allow all on users" on public.users;
 create policy "Allow all on users" on public.users for all using (true) with check (true);
+drop policy if exists "Allow all on access_logs" on public.access_logs;
+create policy "Allow all on access_logs" on public.access_logs for all using (true) with check (true);
 `;
