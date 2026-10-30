@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Shield, LogOut, Smartphone, Monitor } from 'lucide-react';
+import { Search, Shield, LogOut, Smartphone, Monitor, Lightbulb } from 'lucide-react';
 
 interface NavbarProps {
   onOpenAuth: () => void;
@@ -17,6 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth }) => {
     isLoggedIn,
     isMobilePreview,
     toggleMobilePreview,
+    openSuggestionModal,
   } = useApp();
 
   const [isScrolled, setIsScrolled] = useState(false);
@@ -161,6 +162,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAuth }) => {
               <span>Simular Celular</span>
             </>
           )}
+        </button>
+
+        {/* Sugerir Série / Tema Button (Para alunos e usuários colaborarem com sugestões) */}
+        <button
+          onClick={openSuggestionModal}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 transition-all shadow-sm active:scale-95 cursor-pointer"
+          title="Sugerir um tema, vídeo do YouTube, livro ou podcast para uma nova áudio série"
+        >
+          <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+          <span className="hidden sm:inline">Sugerir Série</span>
+          <span className="sm:hidden">Sugerir</span>
         </button>
 
         {/* Admin Dashboard Button: EXCLUSIVELY AVAILABLE FOR ADMIN LOGIN */}

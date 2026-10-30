@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { AudioSeries, AudioEpisode, UserProfile, ReactionType, SupabaseConfig, UserAccessLog } from '../types';
-import { INITIAL_SERIES, INITIAL_EPISODES, INITIAL_USERS, INITIAL_ACCESS_LOGS } from '../data/initialData';
+import { AudioSeries, AudioEpisode, UserProfile, ReactionType, SupabaseConfig, UserAccessLog, SeriesSuggestion, SuggestionSourceType, SuggestionStatus } from '../types';
+import { INITIAL_SERIES, INITIAL_EPISODES, INITIAL_USERS, INITIAL_ACCESS_LOGS, INITIAL_SUGGESTIONS } from '../data/initialData';
 import { resolveAudioUrl, formatSecondsToTime } from '../utils/audioResolver';
 import { encryptPassword, decryptPassword } from '../utils/crypto';
 import { getResolvedSupabaseConfig } from '../config/supabaseConfig';
@@ -69,6 +69,21 @@ interface AppContextType {
   simulateTestAccess: (userName?: string, userLogin?: string) => void;
   clearAccessLogs: () => void;
 
+  // Series Suggestions from Users (Colaboração de novos temas)
+  suggestions: SeriesSuggestion[];
+  isSuggestionModalOpen: boolean;
+  openSuggestionModal: () => void;
+  closeSuggestionModal: () => void;
+  addSuggestion: (data: {
+    themeTitle: string;
+    sourceType: SuggestionSourceType;
+    sourceReference: string;
+    category?: string;
+    notes?: string;
+  }) => Promise<void>;
+  updateSuggestionStatus: (id: string, status: SuggestionStatus, adminNotes?: string) => Promise<void>;
+  deleteSuggestion: (id: string) => Promise<void>;
+
   // Listen Progress & Completion Actions
   toggleEpisodeCompleted: (episodeId: string) => void;
 
@@ -118,10 +133,24 @@ const STORAGE_KEY_CURRENT_USER_ID = 'skills_on_active_user_v2';
 const STORAGE_KEY_LOGGED_IN = 'skills_on_logged_in_v2';
 const STORAGE_KEY_SUPABASE = 'skills_on_supabase_v2';
 const STORAGE_KEY_ACCESS_LOGS = 'skills_on_access_logs_v2';
+const STORAGE_KEY_SUGGESTIONS = 'skills_on_suggestions_v2';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Suggestions from students/users
+  const [suggestions, setSuggestions] = useState<SeriesSuggestion[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_SUGGESTIONS);
+      return saved ? JSON.parse(saved) : INITIAL_SUGGESTIONS;
+    } catch {
+      return INITIAL_SUGGESTIONS;
+    }
+  });
+  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+  const openSuggestionModal = () => setIsSuggestionModalOpen(true);
+  const closeSuggestionModal = () => setIsSuggestionModalOpen(false);
+
   // Load from localStorage or defaults
   const [series, setSeries] = useState<AudioSeries[]>(() => {
     try {
@@ -301,6 +330,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Failed to save access logs', e);
     }
   }, [accessLogs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SUGGESTIONS, JSON.stringify(suggestions));
+    } catch (e) {
+      console.warn('Failed to save suggestions', e);
+    }
+  }, [suggestions]);
 
   // Persist state to LocalStorage
   useEffect(() => {
@@ -868,6 +905,120 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAccessLogs([]);
     localStorage.removeItem(STORAGE_KEY_ACCESS_LOGS);
     setSyncNotification('Histórico de acessos limpo com sucesso.');
+  };
+
+  // Sugestões de novos temas enviadas pelos usuários (Requirement 3)
+  const addSuggestion = async (data: {
+    themeTitle: string;
+    sourceType: SuggestionSourceType;
+    sourceReference: string;
+    category?: string;
+    notes?: string;
+  }) => {
+    const newSug: SeriesSuggestion = {
+      id: `sug-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      userId: currentUser.id,
+      userName: currentUser.name || currentUser.login,
+      userLogin: currentUser.login,
+      userAvatar: currentUser.avatar,
+      themeTitle: data.themeTitle.trim(),
+      sourceType: data.sourceType,
+      sourceReference: data.sourceReference.trim(),
+      category: data.category?.trim() || 'Geral',
+      notes: data.notes?.trim() || '',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    setSuggestions(prev => [newSug, ...prev]);
+    setSyncNotification(`💡 Sua sugestão "${newSug.themeTitle}" foi registrada! O Administrador irá avaliar.`);
+    setIsSuggestionModalOpen(false);
+
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl) {
+      try {
+        await fetch(`${supabaseConfig.supabaseUrl}/rest/v1/series_suggestions`, {
+          method: 'POST',
+          headers: {
+            'apikey': supabaseConfig.supabaseAnonKey,
+            'Authorization': `Bearer ${supabaseConfig.supabaseAnonKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify({
+            id: newSug.id,
+            user_id: newSug.userId,
+            user_name: newSug.userName,
+            user_login: newSug.userLogin,
+            user_avatar: newSug.userAvatar,
+            theme_title: newSug.themeTitle,
+            source_type: newSug.sourceType,
+            source_reference: newSug.sourceReference,
+            category: newSug.category,
+            notes: newSug.notes,
+            status: newSug.status,
+            created_at: newSug.createdAt,
+          }),
+        });
+      } catch (err) {
+        console.warn('Failed to sync suggestion to Supabase', err);
+      }
+    }
+  };
+
+  const updateSuggestionStatus = async (id: string, status: SuggestionStatus, adminNotes?: string) => {
+    setSuggestions(prev =>
+      prev.map(s => {
+        if (s.id === id) {
+          return {
+            ...s,
+            status,
+            adminNotes: adminNotes !== undefined ? adminNotes : s.adminNotes,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return s;
+      })
+    );
+    setSyncNotification(`Status da sugestão atualizado para: ${status}!`);
+
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl) {
+      try {
+        await fetch(`${supabaseConfig.supabaseUrl}/rest/v1/series_suggestions?id=eq.${id}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': supabaseConfig.supabaseAnonKey,
+            'Authorization': `Bearer ${supabaseConfig.supabaseAnonKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status,
+            admin_notes: adminNotes,
+            updated_at: new Date().toISOString(),
+          }),
+        });
+      } catch (err) {
+        console.warn('Failed to update suggestion in Supabase', err);
+      }
+    }
+  };
+
+  const deleteSuggestion = async (id: string) => {
+    setSuggestions(prev => prev.filter(s => s.id !== id));
+    setSyncNotification('Sugestão excluída com sucesso.');
+
+    if (supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl) {
+      try {
+        await fetch(`${supabaseConfig.supabaseUrl}/rest/v1/series_suggestions?id=eq.${id}`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': supabaseConfig.supabaseAnonKey,
+            'Authorization': `Bearer ${supabaseConfig.supabaseAnonKey}`,
+          },
+        });
+      } catch (err) {
+        console.warn('Failed to delete suggestion in Supabase', err);
+      }
+    }
   };
 
   const toggleEmbedPlayer = (useEmbed?: boolean) => {
@@ -1628,6 +1779,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         accessLogs,
         simulateTestAccess,
         clearAccessLogs,
+        suggestions,
+        isSuggestionModalOpen,
+        openSuggestionModal,
+        closeSuggestionModal,
+        addSuggestion,
+        updateSuggestionStatus,
+        deleteSuggestion,
         toggleEpisodeCompleted,
         playEpisode,
         stopAudio,

@@ -61,6 +61,26 @@ export interface UserAccessLog {
   episodesHeard?: string[]; // Títulos de episódios ouvidos durante esta sessão
 }
 
+export type SuggestionSourceType = 'youtube' | 'book' | 'podcast' | 'topic' | 'article' | 'other';
+export type SuggestionStatus = 'pending' | 'in_analysis' | 'approved' | 'in_production' | 'rejected';
+
+export interface SeriesSuggestion {
+  id: string;
+  userId: string;
+  userName: string;
+  userLogin: string;
+  userAvatar?: string;
+  themeTitle: string; // Título ou Tema foco sugerido
+  sourceType: SuggestionSourceType; // 'youtube' | 'book' | 'podcast' | 'topic' | 'article' | 'other'
+  sourceReference: string; // Link do YouTube, Título do Livro/Autor, Link do Podcast ou Referência
+  category?: string; // Categoria / Área de aplicação (ex: Liderança, Negociação, Soft Skills)
+  notes?: string; // Por que essa série agregaria valor à mentoria?
+  status: SuggestionStatus; // 'pending' | 'in_analysis' | 'approved' | 'in_production' | 'rejected'
+  adminNotes?: string; // Avaliação e feedback do Administrador
+  createdAt: string; // ISO date
+  updatedAt?: string;
+}
+
 export interface UserProfile {
   id: string;
   name: string;

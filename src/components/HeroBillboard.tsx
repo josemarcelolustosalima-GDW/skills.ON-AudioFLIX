@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Info, Plus, Check, Play, CheckCircle2 } from 'lucide-react';
+import { Info, Plus, Check, CheckCircle2 } from 'lucide-react';
 import { AudioSeries } from '../types';
 
 interface HeroBillboardProps {
@@ -13,7 +13,6 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
     openSeriesModal,
     currentUser,
     toggleMyList,
-    playEpisode,
   } = useApp();
 
   const seriesEpisodes = episodes
@@ -26,10 +25,6 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
   const completedEpisodesCount = seriesEpisodes.filter(e => currentUser.listenProgress[e.id]?.completed).length;
   const isSeriesCompleted = seriesEpisodes.length > 0 && completedEpisodesCount === seriesEpisodes.length;
   const seriesProgressPct = seriesEpisodes.length > 0 ? Math.round((completedEpisodesCount / seriesEpisodes.length) * 100) : 0;
-  const inProgressEpisode = seriesEpisodes.find(e => {
-    const p = currentUser.listenProgress[e.id];
-    return p && !p.completed && p.currentTime > 5;
-  }) || (completedEpisodesCount > 0 && completedEpisodesCount < seriesEpisodes.length ? seriesEpisodes.find(e => !currentUser.listenProgress[e.id]?.completed) : null);
 
   return (
     <div className="relative w-full h-[80vh] min-h-[620px] sm:min-h-[660px] md:h-[88vh] md:min-h-[720px] max-h-[960px] overflow-hidden select-none">
@@ -128,23 +123,8 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
           </div>
         )}
 
-        {/* CTAs: Continuar (se em progresso), 'Mais Informações' e Minha Lista */}
+        {/* CTAs: Only 'Mais Informações' and Minha Lista */}
         <div className="shrink-0 flex items-center gap-3">
-          {inProgressEpisode && (
-            <button
-              onClick={() => playEpisode(inProgressEpisode, series)}
-              className="flex items-center gap-2 px-5 sm:px-7 py-2.5 sm:py-3 rounded-md bg-[#E50914] hover:bg-[#b80710] text-white font-bold text-xs sm:text-base transition-all active:scale-95 shadow-xl shadow-[#E50914]/30 cursor-pointer"
-              title={`Continuar ouvindo ${inProgressEpisode.title}`}
-            >
-              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-white" />
-              <span>
-                {currentUser.listenProgress[inProgressEpisode.id]?.currentTime && !currentUser.listenProgress[inProgressEpisode.id]?.completed
-                  ? `Continuar Ep. ${inProgressEpisode.episodeNumber}`
-                  : `Ouvir Ep. ${inProgressEpisode.episodeNumber}`}
-              </span>
-            </button>
-          )}
-
           <button
             onClick={() => openSeriesModal(series)}
             className="flex items-center gap-2 px-5 sm:px-7 py-2.5 sm:py-3 rounded-md bg-white hover:bg-neutral-200 text-black font-bold text-xs sm:text-base transition-all active:scale-95 shadow-xl cursor-pointer"

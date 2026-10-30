@@ -388,7 +388,7 @@ export const SeriesDetailModal: React.FC = () => {
           {/* TAB 1: EPISODES LIST (Prominent Visible Scrollbar) */}
           {activeTab === 'episodes' && (
             <div className="space-y-3">
-              {/* Episodes Header & Scroll indicator */}
+              {/* Episodes Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-neutral-900/90 px-3.5 py-2.5 rounded-lg border border-neutral-800">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-xs sm:text-sm">
@@ -398,12 +398,6 @@ export const SeriesDetailModal: React.FC = () => {
                     ({trainingEpisodes.length} {trainingEpisodes.length === 1 ? 'episódio de treinamento' : 'episódios de treinamento'} {synopsisEpisode ? '+ 1 sinopse' : ''})
                   </span>
                 </div>
-                {seriesEpisodes.length > 2 && (
-                  <span className="text-amber-300 font-semibold flex items-center gap-1.5 text-[11px] bg-amber-500/15 px-2.5 py-1 rounded border border-amber-500/30 shrink-0">
-                    <span className="animate-pulse">↕</span>
-                    <span>Role a barra lateral vermelha para ver todos</span>
-                  </span>
-                )}
               </div>
 
               {/* Scrollable Episodes List Container with explicit Visible Scrollbar */}
@@ -510,7 +504,7 @@ export const SeriesDetailModal: React.FC = () => {
                               {isEpSynopsis ? (
                                 <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 flex items-center gap-1 shrink-0">
                                   <Radio className="w-2.5 h-2.5 text-amber-400" />
-                                  <span>Áudio de Sinopse (Abertura)</span>
+                                  <span>ÁUDIO SINOPSE</span>
                                 </span>
                               ) : (
                                 <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-neutral-300 bg-neutral-800 px-1.5 py-0.5 rounded border border-neutral-700 shrink-0">

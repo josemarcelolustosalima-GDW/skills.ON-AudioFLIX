@@ -13,6 +13,7 @@ import { AudioPlayer } from './components/AudioPlayer';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import { SeriesCard } from './components/SeriesCard';
+import { SuggestionModal } from './components/SuggestionModal';
 import {
   Search,
   Heart,
@@ -21,6 +22,7 @@ import {
   Layers,
   Shield,
   CheckCircle2,
+  Lightbulb,
 } from 'lucide-react';
 
 function MainApp() {
@@ -36,6 +38,7 @@ function MainApp() {
     isMobilePreview,
     syncNotification,
     clearSyncNotification,
+    openSuggestionModal,
   } = useApp();
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -287,6 +290,31 @@ function MainApp() {
                     />
                   );
                 })}
+
+                {/* Banner Interativo: Sugestão de Séries e Conteúdos */}
+                <div className="mx-4 md:mx-12 my-8 p-6 md:p-8 rounded-2xl bg-gradient-to-r from-amber-500/15 via-red-950/20 to-neutral-900 border border-amber-500/30 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl relative overflow-hidden group">
+                  <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="space-y-2 text-center md:text-left z-10">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30">
+                      <Lightbulb className="w-4 h-4 text-amber-400" />
+                      <span>Co-Criação de Conteúdo</span>
+                    </div>
+                    <h3 className="text-xl md:text-2xl font-black text-white">
+                      Quer sugerir um tema para uma nova Áudio Série?
+                    </h3>
+                    <p className="text-sm text-neutral-300 max-w-xl">
+                      Indique um <strong>vídeo do YouTube</strong>, <strong>livro</strong>, <strong>podcast</strong> ou assunto prático que gostaria de ver transformado em uma áudio série de treinamento. Nosso time avalia cada contribuição!
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={openSuggestionModal}
+                    className="z-10 flex items-center gap-2.5 px-6 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-sm shadow-xl shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <Lightbulb className="w-5 h-5 text-neutral-950" />
+                    <span>Sugerir Tema ou Fonte</span>
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -295,6 +323,9 @@ function MainApp() {
 
       {/* Series Details & Episode List Modal */}
       <SeriesDetailModal />
+
+      {/* Series Suggestion Modal (Submissão e Acompanhamento pelos Usuários) */}
+      <SuggestionModal />
 
       {/* Persistent Audio Player (Visão Expandida Imersiva Oficial) */}
       <AudioPlayer />
@@ -330,6 +361,10 @@ function MainApp() {
             </button>
             <button onClick={() => { setCurrentView('top_rated'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-left hover:underline cursor-pointer">
               Mais Votadas
+            </button>
+            <button onClick={openSuggestionModal} className="text-left hover:underline text-amber-400 font-semibold cursor-pointer flex items-center gap-1.5">
+              <Lightbulb className="w-3.5 h-3.5" />
+              <span>Sugerir Nova Série</span>
             </button>
             {currentUser.role === 'admin' && (
               <button onClick={() => { setCurrentView('admin'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-left hover:underline text-[#E50914] font-semibold cursor-pointer">

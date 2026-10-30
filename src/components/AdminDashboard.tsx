@@ -38,8 +38,14 @@ import {
   Globe,
   Cloud,
   FileCode,
+  Lightbulb,
+  Youtube,
+  BookOpen,
+  Headphones,
+  MessageSquare,
+  Filter,
 } from 'lucide-react';
-import { AudioSeries, AudioEpisode, UserProfile } from '../types';
+import { AudioSeries, AudioEpisode, UserProfile, SeriesSuggestion, SuggestionStatus, SuggestionSourceType } from '../types';
 import { SUPABASE_SQL_SCHEMA, SUPABASE_RLS_FIX_SQL } from '../data/initialData';
 import { extractGoogleDriveId, analyzeAudioUrl } from '../utils/audioResolver';
 import { decryptPassword, generateSecurePassword } from '../utils/crypto';
@@ -75,9 +81,12 @@ export const AdminDashboard: React.FC = () => {
     accessLogs,
     simulateTestAccess,
     clearAccessLogs,
+    suggestions,
+    updateSuggestionStatus,
+    deleteSuggestion,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'access_logs' | 'supabase'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'access_logs' | 'suggestions' | 'supabase'>('analytics');
   const [accessSearch, setAccessSearch] = useState('');
   const [accessStatusFilter, setAccessStatusFilter] = useState<'all' | 'online' | 'today' | 'closed'>('all');
   const [copiedSql, setCopiedSql] = useState(false);
@@ -88,6 +97,11 @@ export const AdminDashboard: React.FC = () => {
   const [isTestingSupabase, setIsTestingSupabase] = useState(false);
   const [supabaseTestResult, setSupabaseTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [isPushingSupabase, setIsPushingSupabase] = useState(false);
+
+  // Suggestions Tab State
+  const [suggestionStatusFilter, setSuggestionStatusFilter] = useState<'all' | SuggestionStatus>('all');
+  const [suggestionTypeFilter, setSuggestionTypeFilter] = useState<'all' | SuggestionSourceType>('all');
+  const [adminFeedbackNotes, setAdminFeedbackNotes] = useState<{ [id: string]: string }>({});
   const [isPullingSupabase, setIsPullingSupabase] = useState(false);
   const [jsonImportInput, setJsonImportInput] = useState('');
   const [showJsonInput, setShowJsonInput] = useState(false);
@@ -179,6 +193,41 @@ export const AdminDashboard: React.FC = () => {
   const totalListens = series.reduce((acc, s) => acc + s.totalListens, 0);
   const overallApproval = totalLikes + totalUnlikes > 0 ? Math.round((totalLikes / (totalLikes + totalUnlikes)) * 100) : 100;
   const onlineUsersCount = accessLogs.filter(l => l.status === 'online').length;
+  const pendingSuggestionsCount = suggestions.filter(s => s.status === 'pending').length;
+  const approvedSuggestionsCount = suggestions.filter(s => s.status === 'approved' || s.status === 'in_production').length;
+
+  // Convert Suggestion into a New Series pre-filling the series editor
+  const handleConvertSuggestionToSeries = (sug: SeriesSuggestion) => {
+    const defaultHero = '/src/assets/images/skills_hero_leadership_1792881116508.jpg';
+    setEditingSeries({
+      title: sug.themeTitle,
+      subtitle: sug.sourceType === 'youtube'
+        ? `Inspirado no vídeo: ${sug.sourceReference}`
+        : sug.sourceType === 'book'
+        ? `Baseado na obra: ${sug.sourceReference}`
+        : sug.sourceType === 'podcast'
+        ? `Baseado no podcast: ${sug.sourceReference}`
+        : `Foco prático: ${sug.sourceReference}`,
+      synopsis: sug.notes
+        ? `Série criada a partir da contribuição do aluno ${sug.userName} (@${sug.userLogin}). Foco e objetivo: ${sug.notes}`
+        : `Áudio série de capacitação imersiva em ${sug.themeTitle}.`,
+      category: sug.category || 'Desenvolvimento Profissional',
+      mentor: 'Mentor Especialista skills.ON!',
+      mentorRole: 'Conteúdo Curado & Produzido',
+      tags: [sug.sourceType, sug.category || 'Soft Skills', 'Original'].filter(Boolean),
+      heroImage: defaultHero,
+      posterImage: defaultHero,
+      matchScore: 99,
+      releaseYear: new Date().getFullYear(),
+      ratingBadge: 'Livre',
+      audioQuality: 'Dolby Master Sound',
+      likes: 1,
+      unlikes: 0,
+      totalListens: 0,
+    });
+    updateSuggestionStatus(sug.id, 'in_production', 'Série iniciada pelo administrador a partir da sugestão.');
+    setSeriesModalOpen(true);
+  };
 
   // Toggle password visibility for user row (decrypts with AES-256)
   const togglePasswordVisibility = async (userId: string, rawPassword: string) => {
@@ -415,6 +464,27 @@ export const AdminDashboard: React.FC = () => {
           <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-black/40 font-mono">
             {accessLogs.length}
           </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('suggestions')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${
+            activeTab === 'suggestions'
+              ? 'bg-amber-500 text-neutral-950 font-bold shadow-lg shadow-amber-500/25'
+              : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800'
+          }`}
+        >
+          <Lightbulb className="w-4 h-4 text-amber-400" />
+          <span>Sugestões dos Alunos 💡</span>
+          {pendingSuggestionsCount > 0 ? (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-600 text-white font-bold animate-pulse">
+              {pendingSuggestionsCount} novas
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-black/40 font-mono text-neutral-400">
+              {suggestions.length}
+            </span>
+          )}
         </button>
 
         <button
@@ -1940,6 +2010,324 @@ alter table public.episodes add column if not exists is_synopsis boolean default
               </pre>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CONTENT TAB: SUGESTÕES DOS ALUNOS & CO-CRIAÇÃO (REQUIREMENT 3) */}
+      {activeTab === 'suggestions' && (
+        <div className="py-6 space-y-6 animate-in fade-in duration-200">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-800 pb-5">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
+                  <Lightbulb className="w-5 h-5" />
+                </span>
+                <h2 className="text-xl font-bold text-white">Sugestões de Áudio Séries enviadas pelos Alunos</h2>
+              </div>
+              <p className="text-xs text-neutral-400 mt-1">
+                Avalie livros, vídeos do YouTube, podcasts e temas práticos sugeridos pelos estudantes para novas produções.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-xs text-neutral-400">
+                Total: <strong className="text-white font-mono">{suggestions.length}</strong> sugestões
+              </span>
+              {pendingSuggestionsCount > 0 && (
+                <span className="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold">
+                  {pendingSuggestionsCount} aguardando análise
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Metric KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-neutral-900/80 border border-neutral-800 rounded-xl p-4 space-y-1">
+              <span className="text-xs text-neutral-400 uppercase font-semibold">Total de Sugestões</span>
+              <p className="text-2xl md:text-3xl font-extrabold text-white font-mono">{suggestions.length}</p>
+              <span className="text-[11px] text-neutral-500">Contribuições registradas</span>
+            </div>
+
+            <div className="bg-neutral-900/80 border border-amber-500/30 rounded-xl p-4 space-y-1 bg-amber-950/10">
+              <span className="text-xs text-amber-400 uppercase font-semibold">Pendentes de Avaliação</span>
+              <p className="text-2xl md:text-3xl font-extrabold text-amber-400 font-mono">{pendingSuggestionsCount}</p>
+              <span className="text-[11px] text-neutral-400">Aguardando parecer do admin</span>
+            </div>
+
+            <div className="bg-neutral-900/80 border border-neutral-800 rounded-xl p-4 space-y-1">
+              <span className="text-xs text-blue-400 uppercase font-semibold">Em Análise / Pesquisa</span>
+              <p className="text-2xl md:text-3xl font-extrabold text-blue-400 font-mono">
+                {suggestions.filter(s => s.status === 'in_analysis').length}
+              </p>
+              <span className="text-[11px] text-neutral-500">Em validação de viabilidade</span>
+            </div>
+
+            <div className="bg-neutral-900/80 border border-emerald-500/30 rounded-xl p-4 space-y-1 bg-emerald-950/10">
+              <span className="text-xs text-emerald-400 uppercase font-semibold">Aprovadas / Produção</span>
+              <p className="text-2xl md:text-3xl font-extrabold text-emerald-400 font-mono">{approvedSuggestionsCount}</p>
+              <span className="text-[11px] text-emerald-400/80">Convertidas em série</span>
+            </div>
+          </div>
+
+          {/* Filters Bar */}
+          <div className="bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+            {/* Status Filter */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-neutral-400 mr-1 flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5" />
+                Status:
+              </span>
+              {(['all', 'pending', 'in_analysis', 'approved', 'in_production', 'rejected'] as const).map((st) => {
+                const label =
+                  st === 'all' ? `Todas (${suggestions.length})` :
+                  st === 'pending' ? `Pendentes (${suggestions.filter(s => s.status === 'pending').length})` :
+                  st === 'in_analysis' ? 'Em Análise' :
+                  st === 'approved' ? 'Aprovadas' :
+                  st === 'in_production' ? 'Em Produção' : 'Arquivadas';
+                return (
+                  <button
+                    key={st}
+                    onClick={() => setSuggestionStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      suggestionStatusFilter === st
+                        ? 'bg-white text-neutral-950 shadow'
+                        : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Source Type Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-neutral-400">Origem:</span>
+              <select
+                value={suggestionTypeFilter}
+                onChange={(e) => setSuggestionTypeFilter(e.target.value as any)}
+                className="bg-neutral-800 text-xs text-white rounded-lg px-3 py-1.5 border border-neutral-700 focus:outline-none"
+              >
+                <option value="all">Todas as Origens</option>
+                <option value="youtube">Vídeos do YouTube</option>
+                <option value="book">Livros & Manuais</option>
+                <option value="podcast">Podcasts</option>
+                <option value="topic">Temas & Conceitos</option>
+                <option value="article">Artigos</option>
+                <option value="other">Outros</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Suggestions List */}
+          {suggestions
+            .filter(s => suggestionStatusFilter === 'all' || s.status === suggestionStatusFilter)
+            .filter(s => suggestionTypeFilter === 'all' || s.sourceType === suggestionTypeFilter)
+            .length === 0 ? (
+            <div className="text-center py-16 bg-neutral-900/40 border border-dashed border-neutral-800 rounded-xl space-y-3">
+              <Lightbulb className="w-12 h-12 text-neutral-600 mx-auto" />
+              <p className="text-sm font-semibold text-neutral-300">Nenhuma sugestão encontrada com os filtros selecionados.</p>
+              <p className="text-xs text-neutral-500">Alunos e colaboradores podem enviar novas sugestões pela tela inicial.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {suggestions
+                .filter(s => suggestionStatusFilter === 'all' || s.status === suggestionStatusFilter)
+                .filter(s => suggestionTypeFilter === 'all' || s.sourceType === suggestionTypeFilter)
+                .map((sug) => {
+                  const sourceConfig = {
+                    youtube: { label: 'Vídeo do YouTube', icon: Youtube, color: 'bg-red-500/20 text-red-400 border-red-500/40' },
+                    book: { label: 'Livro Recomendado', icon: BookOpen, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' },
+                    podcast: { label: 'Podcast de Referência', icon: Headphones, color: 'bg-purple-500/20 text-purple-400 border-purple-500/40' },
+                    topic: { label: 'Tema / Conceito', icon: Lightbulb, color: 'bg-amber-500/20 text-amber-400 border-amber-500/40' },
+                    article: { label: 'Artigo / Estudo', icon: FileCode, color: 'bg-blue-500/20 text-blue-400 border-blue-500/40' },
+                    other: { label: 'Outra Fonte', icon: MessageSquare, color: 'bg-neutral-500/20 text-neutral-300 border-neutral-500/40' },
+                  }[sug.sourceType] || { label: sug.sourceType, icon: Lightbulb, color: 'bg-neutral-800 text-neutral-300 border-neutral-700' };
+
+                  const SourceIcon = sourceConfig.icon;
+                  const isUrl = sug.sourceReference?.startsWith('http://') || sug.sourceReference?.startsWith('https://');
+
+                  return (
+                    <div
+                      key={sug.id}
+                      className="bg-neutral-900/90 border border-neutral-800 hover:border-neutral-700 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl transition-all"
+                    >
+                      {/* Top Row: User info + Source Badge + Date */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800/80 pb-4">
+                        <div className="flex items-center gap-3">
+                          {sug.userAvatar ? (
+                            <img src={sug.userAvatar} alt={sug.userName} className="w-10 h-10 rounded-full object-cover border border-neutral-700" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-600 to-red-600 flex items-center justify-center font-bold text-white text-sm">
+                              {sug.userName?.charAt(0)?.toUpperCase() || 'U'}
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white text-sm">{sug.userName}</span>
+                              <span className="text-xs text-neutral-400 font-mono">(@{sug.userLogin})</span>
+                            </div>
+                            <span className="text-[11px] text-neutral-500 flex items-center gap-1.5 mt-0.5">
+                              <Clock className="w-3 h-3" />
+                              {new Date(sug.createdAt).toLocaleDateString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${sourceConfig.color}`}>
+                            <SourceIcon className="w-3.5 h-3.5" />
+                            <span>{sourceConfig.label}</span>
+                          </span>
+
+                          {sug.category && (
+                            <span className="px-2.5 py-1 rounded-full text-xs bg-neutral-800 text-neutral-300 border border-neutral-700">
+                              {sug.category}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Main Suggestion Content */}
+                      <div className="space-y-3">
+                        <h3 className="text-lg md:text-xl font-bold text-white">
+                          {sug.themeTitle}
+                        </h3>
+
+                        {/* Source Reference Link / Name */}
+                        <div className="bg-black/60 rounded-xl p-3 border border-neutral-800 flex items-start justify-between gap-3">
+                          <div className="space-y-0.5 text-xs">
+                            <span className="text-neutral-400 font-semibold uppercase text-[10px] block">
+                              Fonte / Referência Indicada:
+                            </span>
+                            <span className="text-neutral-200 font-medium break-all">
+                              {sug.sourceReference}
+                            </span>
+                          </div>
+
+                          {isUrl && (
+                            <a
+                              href={sug.sourceReference}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-white border border-neutral-700 transition-colors cursor-pointer"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Abrir Link</span>
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Student Value Justification */}
+                        {sug.notes && (
+                          <div className="bg-neutral-800/40 rounded-xl p-3.5 border-l-4 border-amber-500 text-xs text-neutral-300 space-y-1">
+                            <span className="text-neutral-400 font-semibold block text-[10px] uppercase">
+                              Motivação e impacto segundo o aluno:
+                            </span>
+                            <p className="leading-relaxed whitespace-pre-wrap">{sug.notes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Admin Feedback and Decision Area */}
+                      <div className="pt-4 border-t border-neutral-800/80 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-neutral-950/40 -mx-5 -mb-5 md:-mx-6 md:-mb-6 p-4 md:p-5 rounded-b-2xl">
+                        {/* Status Dropdown */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-neutral-400 font-semibold whitespace-nowrap">Status:</span>
+                          <select
+                            value={sug.status}
+                            onChange={(e) => {
+                              const newStatus = e.target.value as SuggestionStatus;
+                              updateSuggestionStatus(sug.id, newStatus, sug.adminNotes);
+                            }}
+                            className={`text-xs font-bold rounded-lg px-3 py-2 border focus:outline-none cursor-pointer ${
+                              sug.status === 'pending'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                                : sug.status === 'in_analysis'
+                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/50'
+                                : sug.status === 'approved'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                                : sug.status === 'in_production'
+                                ? 'bg-purple-500/20 text-purple-300 border-purple-500/50'
+                                : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                            }`}
+                          >
+                            <option value="pending">🟡 Pendente de Avaliação</option>
+                            <option value="in_analysis">🔵 Em Análise pelo Time</option>
+                            <option value="approved">🟢 Aprovada para Produção</option>
+                            <option value="in_production">🟣 Em Gravação / Produção</option>
+                            <option value="rejected">⚪ Arquivada / Não Priorizada</option>
+                          </select>
+                        </div>
+
+                        {/* Admin Feedback Note Input */}
+                        <div className="flex-1 flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Adicionar parecer visível para o aluno..."
+                            value={
+                              adminFeedbackNotes[sug.id] !== undefined
+                                ? adminFeedbackNotes[sug.id]
+                                : sug.adminNotes || ''
+                            }
+                            onChange={(e) =>
+                              setAdminFeedbackNotes(prev => ({ ...prev, [sug.id]: e.target.value }))
+                            }
+                            className="w-full bg-neutral-800 text-xs text-white rounded-lg px-3 py-2 border border-neutral-700 focus:outline-none focus:border-amber-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const noteToSave = adminFeedbackNotes[sug.id] !== undefined
+                                ? adminFeedbackNotes[sug.id]
+                                : sug.adminNotes || '';
+                              updateSuggestionStatus(sug.id, sug.status, noteToSave);
+                            }}
+                            className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-white border border-neutral-700 transition-colors cursor-pointer whitespace-nowrap"
+                          >
+                            Salvar Parecer
+                          </button>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleConvertSuggestionToSeries(sug)}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#E50914] hover:bg-[#b80710] text-xs font-bold text-white shadow-lg transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
+                            title="Preencher automaticamente formulário de nova série com os dados sugeridos"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Criar Série</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Deseja realmente excluir a sugestão "${sug.themeTitle}"?`)) {
+                                deleteSuggestion(sug.id);
+                              }
+                            }}
+                            className="p-2 rounded-lg bg-neutral-800 hover:bg-red-950/40 text-neutral-400 hover:text-red-400 border border-neutral-700 transition-colors cursor-pointer"
+                            title="Excluir sugestão"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </div>
       )}
 

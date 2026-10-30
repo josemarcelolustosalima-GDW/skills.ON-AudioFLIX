@@ -204,7 +204,7 @@ export const AudioPlayer: React.FC = () => {
             {(currentPlayingEpisode.isSynopsis || Number(currentPlayingEpisode.episodeNumber) === 0) ? (
               <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-extrabold flex items-center gap-1">
                 <Radio className="w-3 h-3 text-amber-400" />
-                ÁUDIO DE SINOPSE (ABERTURA • EPISÓDIO 0)
+                ÁUDIO SINOPSE
               </span>
             ) : (
               <span className="px-2 py-0.5 rounded bg-[#E50914]/20 text-[#E50914] border border-[#E50914]/40 font-extrabold">

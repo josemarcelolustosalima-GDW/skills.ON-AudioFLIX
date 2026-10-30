@@ -1,4 +1,4 @@
-import { AudioSeries, AudioEpisode, UserProfile, UserAccessLog } from '../types';
+import { AudioSeries, AudioEpisode, UserProfile, UserAccessLog, SeriesSuggestion } from '../types';
 
 export const INITIAL_SERIES: AudioSeries[] = [
   {
@@ -410,6 +410,55 @@ export const INITIAL_ACCESS_LOGS: UserAccessLog[] = [
   },
 ];
 
+export const INITIAL_SUGGESTIONS: SeriesSuggestion[] = [
+  {
+    id: 'sug-1',
+    userId: 'user-student',
+    userName: 'José Marcelo (Aluno)',
+    userLogin: 'aluno',
+    userAvatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+    themeTitle: 'Comunicação Não-Violenta e Mediação de Conflitos',
+    sourceType: 'youtube',
+    sourceReference: 'https://www.youtube.com/watch?v=l7TONauJGfc (Palestra Dr. Marshall Rosenberg)',
+    category: 'Comunicação e Relacionamento Interpessoal',
+    notes: 'Acho fundamental termos uma áudio série prática para ensinar líderes a desarmar conversas difíceis com suas equipes e clientes.',
+    status: 'in_analysis',
+    adminNotes: 'Excelente tema. Podemos estruturar uma série de 6 episódios rápidos com simulações práticas de diálogos difíceis.',
+    createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'sug-2',
+    userId: 'user-carla',
+    userName: 'Carla Vasconcellos',
+    userLogin: 'carla.mentoria',
+    userAvatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+    themeTitle: 'Mentalidade Antifrágil: Crescendo sob o Caos',
+    sourceType: 'book',
+    sourceReference: 'Livro: Antifrágil (Coisas que se Beneficiam com o Caos) - Nassim Nicholas Taleb',
+    category: 'Liderança e Gestão Estratégica',
+    notes: 'Abordar como transformar choques e crises corporativas em vantagens competitivas em vez de apenas sobreviver a elas.',
+    status: 'approved',
+    adminNotes: 'Aprovado! Iniciar roteirização para áudio série de 5 episódios.',
+    createdAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+  },
+  {
+    id: 'sug-3',
+    userId: 'user-marcos',
+    userName: 'Marcos Vinicius',
+    userLogin: 'marcos.dev',
+    userAvatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
+    themeTitle: 'Neurociência do Foco, Sono e Gestão de Dopamina',
+    sourceType: 'podcast',
+    sourceReference: 'Huberman Lab Podcast - Protocols for Focus, Stress and Performance',
+    category: 'Desenvolvimento Pessoal & Produtividade',
+    notes: 'Protocolos práticos de base científica para melhorar a capacidade de concentração diária de quem trabalha sob alta pressão.',
+    status: 'pending',
+    createdAt: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
+  },
+];
+
 // Supabase SQL generation template for user to copy/paste in Supabase SQL editor
 export const SUPABASE_SQL_SCHEMA = `-- skills.ON! - Supabase Database Schema
 -- Execute no Supabase SQL Editor para criar as tabelas completas
@@ -504,13 +553,32 @@ create table if not exists public.access_logs (
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- 6. Permissões de Leitura e Gravação (RLS)
+-- 6. Tabela de Sugestões de Novas Séries enviadas pelos Usuários
+create table if not exists public.series_suggestions (
+  id text primary key,
+  user_id text,
+  user_name text not null,
+  user_login text not null,
+  user_avatar text,
+  theme_title text not null,
+  source_type text default 'topic',
+  source_reference text not null,
+  category text,
+  notes text,
+  status text default 'pending',
+  admin_notes text,
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 7. Permissões de Leitura e Gravação (RLS)
 -- Liberar Leitura, Inserção, Atualização e Exclusão para sincronização direta do aplicativo:
 alter table public.series disable row level security;
 alter table public.episodes disable row level security;
 alter table public.user_reactions disable row level security;
 alter table public.users disable row level security;
 alter table public.access_logs disable row level security;
+alter table public.series_suggestions disable row level security;
 
 -- Políticas de segurança permissivas (caso o RLS permaneça ativado):
 drop policy if exists "Allow public read series" on public.series;
@@ -531,9 +599,12 @@ create policy "Allow all on users" on public.users for all using (true) with che
 
 drop policy if exists "Allow all on access_logs" on public.access_logs;
 create policy "Allow all on access_logs" on public.access_logs for all using (true) with check (true);
+
+drop policy if exists "Allow all on series_suggestions" on public.series_suggestions;
+create policy "Allow all on series_suggestions" on public.series_suggestions for all using (true) with check (true);
 `;
 
-export const SUPABASE_RLS_FIX_SQL = `-- Correção Rápida de Permissão (RLS 42501), Tabela de Usuários, Auditoria e Sinopse
+export const SUPABASE_RLS_FIX_SQL = `-- Correção Rápida de Permissão (RLS 42501), Tabela de Usuários, Sugestões, Auditoria e Sinopse
 -- Cole e execute no SQL Editor do Supabase para destravar o Upload e Reconhecimento de Usuários:
 
 create table if not exists public.users (
@@ -567,11 +638,29 @@ create table if not exists public.access_logs (
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
+create table if not exists public.series_suggestions (
+  id text primary key,
+  user_id text,
+  user_name text not null,
+  user_login text not null,
+  user_avatar text,
+  theme_title text not null,
+  source_type text default 'topic',
+  source_reference text not null,
+  category text,
+  notes text,
+  status text default 'pending',
+  admin_notes text,
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
 alter table public.series disable row level security;
 alter table public.episodes disable row level security;
 alter table public.user_reactions disable row level security;
 alter table public.users disable row level security;
 alter table public.access_logs disable row level security;
+alter table public.series_suggestions disable row level security;
 
 alter table public.episodes add column if not exists is_synopsis boolean default false;
 alter table public.users add column if not exists last_login_at timestamp with time zone default timezone('utc'::text, now());
@@ -582,4 +671,6 @@ drop policy if exists "Allow all on users" on public.users;
 create policy "Allow all on users" on public.users for all using (true) with check (true);
 drop policy if exists "Allow all on access_logs" on public.access_logs;
 create policy "Allow all on access_logs" on public.access_logs for all using (true) with check (true);
+drop policy if exists "Allow all on series_suggestions" on public.series_suggestions;
+create policy "Allow all on series_suggestions" on public.series_suggestions for all using (true) with check (true);
 `;
