@@ -174,7 +174,7 @@ export const AudioPlayer: React.FC = () => {
                 alt={currentPlayingEpisode.title}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/src/assets/images/skills_hero_leadership_1792881116508.jpg';
+                  (e.target as HTMLImageElement).src = '/assets/images/skills_hero_leadership_1792881116508.jpg';
                 }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />

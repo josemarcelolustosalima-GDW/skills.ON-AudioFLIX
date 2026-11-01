@@ -36,7 +36,7 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
           className="w-full h-full object-cover object-top scale-100 transition-transform duration-1000"
           onError={(e) => {
             // Elegant dark gradient fallback
-            (e.target as HTMLImageElement).src = '/src/assets/images/skills_hero_leadership_1792881116508.jpg';
+            (e.target as HTMLImageElement).src = '/assets/images/skills_hero_leadership_1792881116508.jpg';
           }}
         />
 

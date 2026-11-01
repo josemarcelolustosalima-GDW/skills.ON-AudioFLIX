@@ -198,7 +198,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Convert Suggestion into a New Series pre-filling the series editor
   const handleConvertSuggestionToSeries = (sug: SeriesSuggestion) => {
-    const defaultHero = '/src/assets/images/skills_hero_leadership_1792881116508.jpg';
+    const defaultHero = '/assets/images/skills_hero_leadership_1792881116508.jpg';
     setEditingSeries({
       title: sug.themeTitle,
       subtitle: sug.sourceType === 'youtube'
@@ -308,8 +308,8 @@ export const AdminDashboard: React.FC = () => {
       subtitle: editingSeries.subtitle || '',
       synopsis: editingSeries.synopsis || '',
       category: editingSeries.category || 'Geral',
-      heroImage: editingSeries.heroImage || '/src/assets/images/skills_hero_leadership_1792881116508.jpg',
-      posterImage: editingSeries.posterImage || editingSeries.heroImage || '/src/assets/images/skills_hero_leadership_1792881116508.jpg',
+      heroImage: editingSeries.heroImage || '/assets/images/skills_hero_leadership_1792881116508.jpg',
+      posterImage: editingSeries.posterImage || editingSeries.heroImage || '/assets/images/skills_hero_leadership_1792881116508.jpg',
       matchScore: editingSeries.matchScore || 98,
       releaseYear: editingSeries.releaseYear || new Date().getFullYear(),
       ratingBadge: editingSeries.ratingBadge || '14+',

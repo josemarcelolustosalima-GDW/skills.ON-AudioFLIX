@@ -84,7 +84,7 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
           alt={series.title}
           className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = '/src/assets/images/skills_hero_leadership_1792881116508.jpg';
+            (e.target as HTMLImageElement).src = '/assets/images/skills_hero_leadership_1792881116508.jpg';
           }}
         />
 
