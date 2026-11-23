@@ -14,6 +14,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import { SeriesCard } from './components/SeriesCard';
 import { SuggestionModal } from './components/SuggestionModal';
+import { BiometricModal } from './components/BiometricModal';
 import {
   Search,
   Heart,
@@ -23,6 +24,7 @@ import {
   Shield,
   CheckCircle2,
   Lightbulb,
+  ScanFace,
 } from 'lucide-react';
 
 function MainApp() {
@@ -39,9 +41,11 @@ function MainApp() {
     syncNotification,
     clearSyncNotification,
     openSuggestionModal,
+    isBiometricEnabledForCurrentUser,
   } = useApp();
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [biometricModalOpen, setBiometricModalOpen] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Todas');
 
   // Featured billboard series
@@ -336,6 +340,12 @@ function MainApp() {
         onClose={() => setAuthModalOpen(false)}
       />
 
+      {/* Mobile Facial Biometrics Modal */}
+      <BiometricModal
+        isOpen={biometricModalOpen}
+        onClose={() => setBiometricModalOpen(false)}
+      />
+
       {/* Standard Dark Footer (with clearance for mobile bottom nav) */}
       <footer className="mt-auto border-t border-neutral-900 bg-[#101010] py-8 sm:py-10 px-4 md:px-12 text-neutral-500 text-xs mb-14 md:mb-0">
         <div className="max-w-6xl mx-auto space-y-6">
@@ -375,11 +385,38 @@ function MainApp() {
 
           <div className="pt-4 border-t border-neutral-900 flex flex-col sm:flex-row items-center justify-between gap-2 text-neutral-600 text-[11px]">
             <p>© 2026 skills.ON! - Todos os direitos reservados.</p>
-            <p className="flex items-center gap-1.5">
-              <span>Hospedagem Netlify</span>
-              <span>•</span>
-              <span>Google Drive Audio Stream</span>
-            </p>
+
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {isLoggedIn && (
+                <button
+                  type="button"
+                  onClick={() => setBiometricModalOpen(true)}
+                  title={
+                    isBiometricEnabledForCurrentUser
+                      ? 'Biometria Facial habilitada neste aparelho (clique para gerenciar)'
+                      : 'Habilitar acesso por Biometria Facial (App Mobile)'
+                  }
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                    isBiometricEnabledForCurrentUser
+                      ? 'border-emerald-800/60 bg-emerald-950/30 text-emerald-400/90 hover:text-emerald-300'
+                      : 'border-neutral-800/80 bg-neutral-900/60 text-neutral-500 hover:text-neutral-300 hover:border-neutral-700'
+                  }`}
+                >
+                  <ScanFace className="w-3.5 h-3.5" />
+                  <span>
+                    {isBiometricEnabledForCurrentUser
+                      ? 'Biometria Facial Ativa'
+                      : 'Biometria Facial (Mobile)'}
+                  </span>
+                </button>
+              )}
+
+              <p className="flex items-center gap-1.5">
+                <span>Hospedagem Netlify</span>
+                <span>•</span>
+                <span>Google Drive Audio Stream</span>
+              </p>
+            </div>
           </div>
         </div>
       </footer>

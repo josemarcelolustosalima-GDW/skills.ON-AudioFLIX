@@ -5,6 +5,13 @@ import { resolveAudioUrl, formatSecondsToTime } from '../utils/audioResolver';
 import { encryptPassword, decryptPassword } from '../utils/crypto';
 import { getResolvedSupabaseConfig } from '../config/supabaseConfig';
 import {
+  BiometricDeviceBinding,
+  getStoredBiometricBindings,
+  removeBiometricBindingForUser,
+  registerFacialBiometric,
+  authenticateWithFacialBiometric,
+} from '../utils/biometricAuth';
+import {
   decodeCatalogFromUrl,
   encodeCatalogForUrl,
   downloadCatalogFile,
@@ -110,6 +117,11 @@ interface AppContextType {
   setSearchQuery: (query: string) => void;
   setActiveCategory: (cat: string) => void;
   loginWithCredentials: (loginOrEmail: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  biometricBindings: BiometricDeviceBinding[];
+  isBiometricEnabledForCurrentUser: boolean;
+  enableFacialBiometrics: () => Promise<{ success: boolean; message: string }>;
+  disableFacialBiometrics: () => void;
+  loginWithBiometrics: (preferredUserId?: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   loginAs: (userId: string) => void;
   switchUserRole: (role: 'admin' | 'user') => void;
@@ -320,8 +332,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isGoogleDriveRef = useRef<boolean>(false);
   const lastTimeSaveRef = useRef<number>(0);
 
+  // Biometric facial registrations stored on this device
+  const [biometricBindings, setBiometricBindings] = useState<BiometricDeviceBinding[]>(() =>
+    getStoredBiometricBindings()
+  );
+
   // Current user derived
   const currentUser = allUsers.find(u => u.id === currentUserId) || allUsers[0];
+  const isBiometricEnabledForCurrentUser = biometricBindings.some(b => b.userId === currentUser.id);
 
   useEffect(() => {
     try {
@@ -1282,40 +1300,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     encryptUnprotectedPasswords();
   }, []);
 
+  const recordSessionOnLogin = (targetUser: UserProfile, authMethodSuffix?: string) => {
+    const nowIso = new Date().toISOString();
+    const baseDevice = getClientDeviceSummary();
+    const newLog: UserAccessLog = {
+      id: `sess-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      userId: targetUser.id,
+      userName: targetUser.name,
+      userLogin: targetUser.login,
+      userAvatar: targetUser.avatar,
+      loginAt: nowIso,
+      lastActiveAt: nowIso,
+      durationMinutes: 1,
+      status: 'online',
+      deviceInfo: authMethodSuffix ? `${baseDevice} (${authMethodSuffix})` : baseDevice,
+      episodesHeard: [],
+    };
+
+    setAccessLogs(prev => [newLog, ...prev.slice(0, 99)]);
+    setAllUsers(prev =>
+      prev.map(item =>
+        item.id === targetUser.id
+          ? {
+              ...item,
+              lastLoginAt: nowIso,
+              lastActiveAt: nowIso,
+              totalAccessCount: (item.totalAccessCount || 0) + 1,
+            }
+          : item
+      )
+    );
+  };
+
   // Login with Credentials: supports Login or Email + Password with cryptographic verification and session audit log
   const loginWithCredentials = async (loginOrEmail: string, pass: string): Promise<{ success: boolean; message?: string }> => {
     const cleanLogin = loginOrEmail.trim().toLowerCase();
-
-    const recordSessionOnLogin = (targetUser: UserProfile) => {
-      const nowIso = new Date().toISOString();
-      const newLog: UserAccessLog = {
-        id: `sess-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        userId: targetUser.id,
-        userName: targetUser.name,
-        userLogin: targetUser.login,
-        userAvatar: targetUser.avatar,
-        loginAt: nowIso,
-        lastActiveAt: nowIso,
-        durationMinutes: 1,
-        status: 'online',
-        deviceInfo: getClientDeviceSummary(),
-        episodesHeard: [],
-      };
-
-      setAccessLogs(prev => [newLog, ...prev.slice(0, 99)]);
-      setAllUsers(prev =>
-        prev.map(item =>
-          item.id === targetUser.id
-            ? {
-                ...item,
-                lastLoginAt: nowIso,
-                lastActiveAt: nowIso,
-                totalAccessCount: (item.totalAccessCount || 0) + 1,
-              }
-            : item
-        )
-      );
-    };
 
     for (const u of allUsers) {
       const matchLogin = u.login?.toLowerCase() === cleanLogin || u.email?.toLowerCase() === cleanLogin;
@@ -1383,6 +1402,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       success: false,
       message: 'Credenciais inválidas. Verifique seu login e senha.',
     };
+  };
+
+  // Enable Facial Biometrics (WebAuthn Platform Authenticator) for current authenticated user
+  const enableFacialBiometrics = async (): Promise<{ success: boolean; message: string }> => {
+    const res = await registerFacialBiometric({
+      id: currentUser.id,
+      login: currentUser.login,
+      name: currentUser.name,
+    });
+
+    if (res.success) {
+      setBiometricBindings(getStoredBiometricBindings());
+      setSyncNotification(`✅ ${res.message}`);
+    }
+    return { success: res.success, message: res.message };
+  };
+
+  // Disable Facial Biometrics on this device for current user
+  const disableFacialBiometrics = () => {
+    const updated = removeBiometricBindingForUser(currentUser.id);
+    setBiometricBindings(updated);
+    setSyncNotification('Biometria facial desativada neste aparelho.');
+  };
+
+  // Sign in using previously enabled Facial Biometrics on this device
+  const loginWithBiometrics = async (preferredUserId?: string): Promise<{ success: boolean; message?: string }> => {
+    const res = await authenticateWithFacialBiometric(preferredUserId);
+    if (!res.success || !res.binding) {
+      return { success: false, message: res.message };
+    }
+
+    const matchedBinding = res.binding;
+    setBiometricBindings(getStoredBiometricBindings());
+
+    let targetUser = allUsers.find(
+      u => u.id === matchedBinding.userId || u.login.toLowerCase() === matchedBinding.userLogin.toLowerCase()
+    );
+
+    if (!targetUser && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      try {
+        const cloudUser = await fetchUserByLoginFromSupabase(
+          supabaseConfig.supabaseUrl,
+          supabaseConfig.supabaseAnonKey,
+          matchedBinding.userLogin
+        );
+        if (cloudUser) {
+          targetUser = cloudUser;
+          setAllUsers(prev => {
+            const exists = prev.some(u => u.id === cloudUser.id);
+            const updated = exists ? prev : [...prev, cloudUser];
+            try {
+              localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.warn('Biometric cloud user refresh error:', err);
+      }
+    }
+
+    if (!targetUser) {
+      return {
+        success: false,
+        message: 'Usuário vinculado à biometria não foi encontrado. Entre com login e senha.',
+      };
+    }
+
+    setCurrentUserId(targetUser.id);
+    setIsLoggedIn(true);
+    recordSessionOnLogin(targetUser, 'Biometria Facial');
+    setCurrentView(targetUser.role === 'admin' ? 'admin' : 'home');
+    return { success: true };
   };
 
   const logout = () => {
@@ -1809,6 +1901,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSearchQuery,
         setActiveCategory,
         loginWithCredentials,
+        biometricBindings,
+        isBiometricEnabledForCurrentUser,
+        enableFacialBiometrics,
+        disableFacialBiometrics,
+        loginWithBiometrics,
         logout,
         loginAs,
         switchUserRole,

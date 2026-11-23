@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Lock, ArrowRight, Eye, EyeOff, CheckCircle2, ShieldCheck, User } from 'lucide-react';
+import { Lock, ArrowRight, Eye, EyeOff, CheckCircle2, ShieldCheck, User, ScanFace } from 'lucide-react';
 import loginMosaicBg from '../assets/images/audio_skills_mosaic_bg.jpg';
 
 interface AuthModalProps {
@@ -9,7 +9,7 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { loginWithCredentials } = useApp();
+  const { loginWithCredentials, biometricBindings, loginWithBiometrics } = useApp();
 
   const [loginInput, setLoginInput] = useState('');
   const [password, setPassword] = useState('');
@@ -17,8 +17,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false);
 
   if (!isOpen) return null;
+
+  const primaryBiometric = biometricBindings[0];
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +43,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       setErrorMsg('Erro no processo de autenticação. Tente novamente.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    setIsBiometricLoading(true);
+
+    try {
+      const res = await loginWithBiometrics(primaryBiometric?.userId);
+      if (res.success) {
+        setSuccessMsg('Biometria facial reconhecida! Entrando...');
+        setTimeout(() => {
+          onClose();
+        }, 350);
+      } else {
+        setErrorMsg(res.message || 'Não foi possível validar a biometria facial.');
+      }
+    } catch {
+      setErrorMsg('Falha na autenticação por biometria facial.');
+    } finally {
+      setIsBiometricLoading(false);
     }
   };
 
@@ -91,6 +116,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </div>
         )}
 
+        {/* Facial Biometrics Quick Login (Shown on devices where user enabled it internally) */}
+        {primaryBiometric && (
+          <div className="mb-5">
+            <button
+              type="button"
+              disabled={isBiometricLoading || isLoading}
+              onClick={handleBiometricLogin}
+              className="w-full py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-emerald-500/40 hover:border-emerald-400/70 text-white transition-all active:scale-98 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 shadow-lg"
+            >
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <ScanFace className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs sm:text-sm font-bold text-white leading-tight">
+                  {isBiometricLoading ? 'Validando Biometria Facial...' : 'Entrar com Biometria Facial'}
+                </div>
+                <div className="text-[11px] text-neutral-400">
+                  {primaryBiometric.deviceType} • @{primaryBiometric.userLogin}
+                </div>
+              </div>
+            </button>
+
+            <div className="relative flex items-center justify-center my-4">
+              <div className="border-t border-neutral-800 w-full" />
+              <span className="bg-[#141414] px-2.5 text-[10px] uppercase tracking-wider text-neutral-500 whitespace-nowrap">
+                ou acesse com login e senha
+              </span>
+              <div className="border-t border-neutral-800 w-full" />
+            </div>
+          </div>
+        )}
+
         {/* Secure Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
@@ -135,7 +192,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isBiometricLoading}
             className="w-full py-3 rounded-lg bg-[#E50914] hover:bg-[#b80710] font-bold text-sm text-white transition-transform active:scale-98 shadow-xl mt-3 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
           >
             <span>{isLoading ? 'Autenticando...' : 'Entrar no Sistema'}</span>
