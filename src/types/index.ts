@@ -35,6 +35,7 @@ export interface AudioSeries {
   unlikes: number;
   totalListens: number;
   episodeDurationEstimate?: string; // e.g. "18 a 25 min por episódio"
+  accessPassword?: string; // AES-256 encrypted password required to unlock this series (empty = free access)
   createdAt: string;
 }
 
@@ -90,6 +91,7 @@ export interface UserProfile {
   role: 'admin' | 'user';
   avatar: string;
   myList: string[]; // series IDs
+  unlockedSeries?: string[]; // series IDs unlocked by password
   reactions: Record<string, ReactionType>; // seriesId -> reaction
   listenProgress: Record<string, {
     episodeId: string;

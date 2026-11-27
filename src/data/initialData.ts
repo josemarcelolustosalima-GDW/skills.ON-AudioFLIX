@@ -483,8 +483,12 @@ create table if not exists public.series (
   likes integer default 0,
   unlikes integer default 0,
   total_listens integer default 0,
+  access_password text default '',
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
+
+-- Garantir adição da coluna access_password caso a tabela series já exista:
+alter table public.series add column if not exists access_password text default '';
 
 -- 2. Tabela de Episódios das Séries
 create table if not exists public.episodes (
@@ -525,6 +529,7 @@ create table if not exists public.users (
   role text default 'user',
   avatar text default '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
   my_list text[] default '{}',
+  unlocked_series text[] default '{}',
   reactions jsonb default '{}'::jsonb,
   listen_progress jsonb default '{}'::jsonb,
   last_login_at timestamp with time zone default timezone('utc'::text, now()),
@@ -533,7 +538,8 @@ create table if not exists public.users (
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- Garantir colunas de auditoria de acesso se a tabela já existir:
+-- Garantir colunas de auditoria de acesso e séries liberadas se a tabela já existir:
+alter table public.users add column if not exists unlocked_series text[] default '{}';
 alter table public.users add column if not exists last_login_at timestamp with time zone default timezone('utc'::text, now());
 alter table public.users add column if not exists last_active_at timestamp with time zone default timezone('utc'::text, now());
 alter table public.users add column if not exists total_access_count integer default 1;
@@ -616,6 +622,7 @@ create table if not exists public.users (
   role text default 'user',
   avatar text default '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
   my_list text[] default '{}',
+  unlocked_series text[] default '{}',
   reactions jsonb default '{}'::jsonb,
   listen_progress jsonb default '{}'::jsonb,
   last_login_at timestamp with time zone default timezone('utc'::text, now()),
@@ -662,7 +669,9 @@ alter table public.users disable row level security;
 alter table public.access_logs disable row level security;
 alter table public.series_suggestions disable row level security;
 
+alter table public.series add column if not exists access_password text default '';
 alter table public.episodes add column if not exists is_synopsis boolean default false;
+alter table public.users add column if not exists unlocked_series text[] default '{}';
 alter table public.users add column if not exists last_login_at timestamp with time zone default timezone('utc'::text, now());
 alter table public.users add column if not exists last_active_at timestamp with time zone default timezone('utc'::text, now());
 alter table public.users add column if not exists total_access_count integer default 1;

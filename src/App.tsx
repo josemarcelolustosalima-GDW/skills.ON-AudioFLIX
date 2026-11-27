@@ -15,6 +15,7 @@ import { AuthModal } from './components/AuthModal';
 import { SeriesCard } from './components/SeriesCard';
 import { SuggestionModal } from './components/SuggestionModal';
 import { BiometricModal } from './components/BiometricModal';
+import { SeriesUnlockModal } from './components/SeriesUnlockModal';
 import {
   Search,
   Heart,
@@ -327,6 +328,9 @@ function MainApp() {
 
       {/* Series Details & Episode List Modal */}
       <SeriesDetailModal />
+
+      {/* Series Access Password Unlock Modal */}
+      <SeriesUnlockModal />
 
       {/* Series Suggestion Modal (Submissão e Acompanhamento pelos Usuários) */}
       <SuggestionModal />

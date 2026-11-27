@@ -153,6 +153,7 @@ export async function pushCatalogToSupabase(
       likes: s.likes || 0,
       unlikes: s.unlikes || 0,
       total_listens: s.totalListens || 0,
+      access_password: s.accessPassword || '',
     }));
 
     const resSeries = await fetch(`${cleanUrl}/rest/v1/series`, {
@@ -223,6 +224,7 @@ export async function pushCatalogToSupabase(
         role: u.role || 'user',
         avatar: u.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
         my_list: u.myList || [],
+        unlocked_series: u.unlockedSeries || [],
         reactions: u.reactions || {},
         listen_progress: u.listenProgress || {},
         created_at: u.createdAt || new Date().toISOString(),
@@ -297,6 +299,7 @@ export async function pullCatalogFromSupabase(
       likes: s.likes || 0,
       unlikes: s.unlikes || 0,
       totalListens: s.total_listens || 0,
+      accessPassword: s.access_password || '',
       createdAt: s.created_at || new Date().toISOString(),
     }));
 
@@ -348,6 +351,7 @@ export async function pullCatalogFromSupabase(
           role: r.role as 'admin' | 'user',
           avatar: r.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
           myList: Array.isArray(r.my_list) ? r.my_list : [],
+          unlockedSeries: Array.isArray(r.unlocked_series) ? r.unlocked_series : [],
           reactions: (r.reactions && typeof r.reactions === 'object') ? r.reactions : {},
           listenProgress: (r.listen_progress && typeof r.listen_progress === 'object') ? r.listen_progress : {},
           createdAt: r.created_at || new Date().toISOString(),
@@ -462,6 +466,7 @@ export async function pushSingleSeriesToSupabase(
       likes: s.likes || 0,
       unlikes: s.unlikes || 0,
       total_listens: s.totalListens || 0,
+      access_password: s.accessPassword || '',
     };
     const res = await fetch(`${cleanUrl}/rest/v1/series`, {
       method: 'POST',
@@ -523,6 +528,7 @@ export async function pushSingleUserToSupabase(
       role: u.role || 'user',
       avatar: u.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
       my_list: u.myList || [],
+      unlocked_series: u.unlockedSeries || [],
       reactions: u.reactions || {},
       listen_progress: u.listenProgress || {},
       created_at: u.createdAt || new Date().toISOString(),
@@ -598,6 +604,7 @@ export async function pullUsersFromSupabase(
       role: r.role as 'admin' | 'user',
       avatar: r.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
       myList: Array.isArray(r.my_list) ? r.my_list : [],
+      unlockedSeries: Array.isArray(r.unlocked_series) ? r.unlocked_series : [],
       reactions: (r.reactions && typeof r.reactions === 'object') ? r.reactions : {},
       listenProgress: (r.listen_progress && typeof r.listen_progress === 'object') ? r.listen_progress : {},
       createdAt: r.created_at || new Date().toISOString(),
@@ -628,6 +635,7 @@ export async function pushAllUsersToSupabase(
       role: u.role || 'user',
       avatar: u.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
       my_list: u.myList || [],
+      unlocked_series: u.unlockedSeries || [],
       reactions: u.reactions || {},
       listen_progress: u.listenProgress || {},
       created_at: u.createdAt || new Date().toISOString(),
@@ -687,6 +695,7 @@ export async function fetchUserByLoginFromSupabase(
       role: r.role as 'admin' | 'user',
       avatar: r.avatar || '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
       myList: Array.isArray(r.my_list) ? r.my_list : [],
+      unlockedSeries: Array.isArray(r.unlocked_series) ? r.unlocked_series : [],
       reactions: (r.reactions && typeof r.reactions === 'object') ? r.reactions : {},
       listenProgress: (r.listen_progress && typeof r.listen_progress === 'object') ? r.listen_progress : {},
       createdAt: r.created_at || new Date().toISOString(),

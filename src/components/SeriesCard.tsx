@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AudioSeries } from '../types';
 import { useApp } from '../context/AppContext';
-import { Play, Plus, Check, ThumbsUp, ThumbsDown, Heart, ChevronDown, Clock } from 'lucide-react';
+import { Play, Plus, Check, ThumbsUp, ThumbsDown, Heart, ChevronDown, Clock, Lock, Unlock } from 'lucide-react';
 
 interface SeriesCardProps {
   series: AudioSeries;
@@ -16,6 +16,7 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
     currentUser,
     toggleMyList,
     toggleReaction,
+    isSeriesLockedForUser,
   } = useApp();
 
   const [isHovered, setIsHovered] = useState(false);
@@ -29,6 +30,8 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
   const trainingEpisodesCount = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0).length;
   const isInMyList = currentUser.myList.includes(series.id);
   const currentReaction = currentUser.reactions[series.id];
+  const hasPasswordProtection = Boolean(series.accessPassword && series.accessPassword.trim());
+  const isLocked = isSeriesLockedForUser(series);
 
   // Listen progress & completion calculation
   const contentEpisodes = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0);
@@ -112,13 +115,33 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
           ) : null}
         </div>
 
-        {/* Rating badge */}
-        <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 z-10 px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/75 backdrop-blur-xs text-neutral-300 border border-neutral-700">
-          {series.ratingBadge}
+        {/* Rating badge + Lock status */}
+        <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 z-10 flex items-center gap-1">
+          {isLocked ? (
+            <span
+              className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-amber-500/90 text-neutral-950 border border-amber-300/60 shadow flex items-center gap-0.5"
+              title="Série protegida por senha exclusiva"
+            >
+              <Lock className="w-2.5 h-2.5 stroke-[2.5]" />
+              <span className="hidden sm:inline">Senha</span>
+            </span>
+          ) : hasPasswordProtection ? (
+            <span
+              className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-emerald-600/90 text-white border border-emerald-400/50 shadow flex items-center gap-0.5"
+              title="Série liberada para você"
+            >
+              <Unlock className="w-2.5 h-2.5 stroke-[2.5]" />
+            </span>
+          ) : null}
+          <span className="px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-black/75 backdrop-blur-xs text-neutral-300 border border-neutral-700">
+            {series.ratingBadge}
+          </span>
         </div>
 
         {/* Gradient scrim */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
+        <div className={`absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent transition-opacity ${
+          isLocked ? 'opacity-90' : 'opacity-80 group-hover:opacity-60'
+        }`} />
 
         {/* Title overlay in card base */}
         <div className="absolute bottom-2 sm:bottom-2.5 left-2 sm:left-3 right-2 sm:right-3 z-10">
@@ -165,17 +188,36 @@ export const SeriesCard: React.FC<SeriesCardProps> = ({ series, className }) => 
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handlePlayFirst}
-                className="px-2.5 py-1.5 rounded-full bg-white hover:bg-neutral-200 text-black flex items-center gap-1 text-xs font-bold transition-transform active:scale-90 shadow cursor-pointer"
-                title={inProgressEpisode ? `Continuar Ep. ${inProgressEpisode.episodeNumber}` : 'Ouvir Série'}
+                className={`px-2.5 py-1.5 rounded-full flex items-center gap-1 text-xs font-bold transition-transform active:scale-90 shadow cursor-pointer ${
+                  isLocked
+                    ? 'bg-amber-500 hover:bg-amber-400 text-neutral-950'
+                    : 'bg-white hover:bg-neutral-200 text-black'
+                }`}
+                title={
+                  isLocked
+                    ? 'Inserir senha para liberar esta série'
+                    : inProgressEpisode
+                    ? `Continuar Ep. ${inProgressEpisode.episodeNumber}`
+                    : 'Ouvir Série'
+                }
               >
-                <Play className="w-3.5 h-3.5 fill-black" />
-                <span>
-                  {inProgressEpisode
-                    ? `Retomar Ep. ${inProgressEpisode.episodeNumber}`
-                    : isSeriesCompleted
-                    ? 'Ouvir de novo'
-                    : 'Ouvir'}
-                </span>
+                {isLocked ? (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Desbloquear</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-black" />
+                    <span>
+                      {inProgressEpisode
+                        ? `Retomar Ep. ${inProgressEpisode.episodeNumber}`
+                        : isSeriesCompleted
+                        ? 'Ouvir de novo'
+                        : 'Ouvir'}
+                    </span>
+                  </>
+                )}
               </button>
 
               <button

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Shield,
@@ -44,11 +44,14 @@ import {
   Headphones,
   MessageSquare,
   Filter,
+  Unlock,
+  KeyRound,
+  Search,
 } from 'lucide-react';
 import { AudioSeries, AudioEpisode, UserProfile, SeriesSuggestion, SuggestionStatus, SuggestionSourceType } from '../types';
 import { SUPABASE_SQL_SCHEMA, SUPABASE_RLS_FIX_SQL } from '../data/initialData';
 import { extractGoogleDriveId, analyzeAudioUrl } from '../utils/audioResolver';
-import { decryptPassword, generateSecurePassword } from '../utils/crypto';
+import { encryptPassword, decryptPassword, generateSecurePassword } from '../utils/crypto';
 import { generateInitialDataTsCode, downloadCatalogFile } from '../utils/syncManager';
 
 export const AdminDashboard: React.FC = () => {
@@ -84,9 +87,10 @@ export const AdminDashboard: React.FC = () => {
     suggestions,
     updateSuggestionStatus,
     deleteSuggestion,
+    setSeriesAccessPassword,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'access_logs' | 'suggestions' | 'supabase'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'series' | 'episodes' | 'users' | 'passwords' | 'access_logs' | 'suggestions' | 'supabase'>('analytics');
   const [accessSearch, setAccessSearch] = useState('');
   const [accessStatusFilter, setAccessStatusFilter] = useState<'all' | 'online' | 'today' | 'closed'>('all');
   const [copiedSql, setCopiedSql] = useState(false);
@@ -122,6 +126,69 @@ export const AdminDashboard: React.FC = () => {
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const [decryptedPasswords, setDecryptedPasswords] = useState<Record<string, string>>({});
   const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
+
+  // Series Access Passwords Management State
+  const [seriesPasswordDrafts, setSeriesPasswordDrafts] = useState<Record<string, string>>({});
+  const [seriesPasswordVisible, setSeriesPasswordVisible] = useState<Record<string, boolean>>({});
+  const [copiedSeriesPasswordId, setCopiedSeriesPasswordId] = useState<string | null>(null);
+  const [savingSeriesPasswordId, setSavingSeriesPasswordId] = useState<string | null>(null);
+  const [seriesPasswordSearch, setSeriesPasswordSearch] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadDecryptedSeriesPasswords = async () => {
+      const nextMap: Record<string, string> = {};
+      for (const s of series) {
+        const raw = s.accessPassword?.trim() || '';
+        if (!raw) {
+          nextMap[s.id] = '';
+        } else if (raw.startsWith('enc:') || raw.startsWith('enc_b64:')) {
+          nextMap[s.id] = await decryptPassword(raw);
+        } else {
+          nextMap[s.id] = raw;
+        }
+      }
+      if (!cancelled) {
+        setSeriesPasswordDrafts(nextMap);
+      }
+    };
+    loadDecryptedSeriesPasswords();
+    return () => {
+      cancelled = true;
+    };
+  }, [series]);
+
+  const generateSeriesPassCode = (): string => {
+    const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const values = crypto.getRandomValues(new Uint8Array(6));
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += charset[values[i] % charset.length];
+    }
+    return `SK-${code}`;
+  };
+
+  const handleSaveSeriesPasswordRow = async (seriesId: string, value: string) => {
+    setSavingSeriesPasswordId(seriesId);
+    try {
+      await setSeriesAccessPassword(seriesId, value);
+    } finally {
+      setSavingSeriesPasswordId(null);
+    }
+  };
+
+  const handleCopySeriesPassword = async (seriesId: string) => {
+    let val = seriesPasswordDrafts[seriesId] || '';
+    if (!val) {
+      const target = series.find(s => s.id === seriesId);
+      const raw = target?.accessPassword || '';
+      val = (raw.startsWith('enc:') || raw.startsWith('enc_b64:')) ? await decryptPassword(raw) : raw;
+    }
+    if (!val.trim()) return;
+    navigator.clipboard.writeText(val.trim());
+    setCopiedSeriesPasswordId(seriesId);
+    setTimeout(() => setCopiedSeriesPasswordId(null), 2000);
+  };
 
   // Helpers for access log formatting
   const formatAccessDate = (isoString?: string) => {
@@ -297,10 +364,18 @@ export const AdminDashboard: React.FC = () => {
     setEditingUser(null);
   };
 
-  // Handle Series Save (Includes episode duration estimate)
-  const handleSaveSeries = (e: React.FormEvent) => {
+  // Handle Series Save (Includes episode duration estimate and optional accessPassword)
+  const handleSaveSeries = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSeries?.title || !editingSeries?.category) return;
+
+    const rawPass = editingSeries.accessPassword?.trim() || '';
+    let finalEncryptedPass = '';
+    if (rawPass) {
+      finalEncryptedPass = (rawPass.startsWith('enc:') || rawPass.startsWith('enc_b64:'))
+        ? rawPass
+        : await encryptPassword(rawPass);
+    }
 
     const newSeries: AudioSeries = {
       id: editingSeries.id || `series-${Date.now()}`,
@@ -322,6 +397,7 @@ export const AdminDashboard: React.FC = () => {
       unlikes: editingSeries.unlikes ?? 0,
       totalListens: editingSeries.totalListens ?? 0,
       episodeDurationEstimate: '2 a 4 min por episódio',
+      accessPassword: finalEncryptedPass,
       createdAt: editingSeries.createdAt || new Date().toISOString(),
     };
 
@@ -497,6 +573,21 @@ export const AdminDashboard: React.FC = () => {
         >
           <Layers className="w-4 h-4" />
           <span>Gerenciar Séries ({series.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('passwords')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${
+            activeTab === 'passwords'
+              ? 'bg-[#E50914] text-white shadow-lg shadow-[#E50914]/25'
+              : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800'
+          }`}
+        >
+          <KeyRound className="w-4 h-4 text-amber-400" />
+          <span>Senhas das Séries</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-black/40 font-mono">
+            {series.filter(s => Boolean(s.accessPassword && s.accessPassword.trim())).length}/{series.length}
+          </span>
         </button>
 
         <button
@@ -1309,8 +1400,16 @@ export const AdminDashboard: React.FC = () => {
                 <div>
                   <div className="relative aspect-video w-full bg-neutral-950">
                     <img src={s.heroImage || s.posterImage} alt={s.title} className="w-full h-full object-cover" />
-                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-black/80 text-white border border-neutral-700">
-                      {s.ratingBadge}
+                    <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                      {Boolean(s.accessPassword && s.accessPassword.trim()) && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/90 text-black flex items-center gap-1 shadow">
+                          <Lock className="w-3 h-3" />
+                          <span>Senha</span>
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-black/80 text-white border border-neutral-700">
+                        {s.ratingBadge}
+                      </span>
                     </div>
                     {s.featured && (
                       <div className="absolute top-2 left-2 px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-black flex items-center gap-1 shadow-md">
@@ -1395,8 +1494,12 @@ export const AdminDashboard: React.FC = () => {
                       <Eye className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => {
-                        setEditingSeries({ ...s });
+                      onClick={async () => {
+                        const rawPass = s.accessPassword?.trim() || '';
+                        const clearPass = rawPass && (rawPass.startsWith('enc:') || rawPass.startsWith('enc_b64:'))
+                          ? await decryptPassword(rawPass)
+                          : rawPass;
+                        setEditingSeries({ ...s, accessPassword: clearPass });
                         setSeriesModalOpen(true);
                       }}
                       className="p-1.5 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition-colors"
@@ -2331,6 +2434,266 @@ alter table public.episodes add column if not exists is_synopsis boolean default
         </div>
       )}
 
+      {/* CONTENT TAB: SENHAS DE ACESSO POR SÉRIE (CONTROLE DE PROGRESSÃO DE TREINAMENTO) */}
+      {activeTab === 'passwords' && (
+        <div className="py-6 space-y-6 animate-in fade-in duration-200">
+          {/* Header */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-neutral-800 pb-5">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  Trilha de Capacitação & Mentoria
+                </span>
+                <span className="text-xs text-neutral-400">Liberação Progressiva por Questionário</span>
+              </div>
+              <h2 className="text-xl md:text-2xl font-extrabold text-white flex items-center gap-2.5">
+                <KeyRound className="w-6 h-6 text-[#E50914]" />
+                <span>Senhas de Acesso Exclusivas por Série</span>
+              </h2>
+              <p className="text-xs text-neutral-400 mt-1 max-w-3xl">
+                Defina uma senha exclusiva e diferente para cada série de treinamento. Quando o mentorado responder ao questionário da série anterior, basta copiar a senha correspondente abaixo e enviar para ele liberar a próxima série. Séries sem senha ficam com <strong>Acesso Livre</strong>.
+              </p>
+            </div>
+
+            <div className="relative w-full lg:w-72 shrink-0">
+              <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={seriesPasswordSearch}
+                onChange={(e) => setSeriesPasswordSearch(e.target.value)}
+                placeholder="Buscar série por nome ou categoria..."
+                className="w-full bg-neutral-900 text-xs text-white rounded-xl pl-9 pr-3 py-2.5 border border-neutral-800 focus:outline-none focus:border-[#E50914]"
+              />
+            </div>
+          </div>
+
+          {/* KPI Summary */}
+          {(() => {
+            const protectedCount = series.filter(s => Boolean(s.accessPassword && s.accessPassword.trim())).length;
+            const freeCount = series.length - protectedCount;
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-neutral-900/80 border border-neutral-800 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-neutral-400 uppercase font-semibold">Total de Séries</span>
+                    <p className="text-2xl font-black text-white font-mono mt-0.5">{series.length}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-neutral-800 text-neutral-300">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-neutral-900/80 border border-amber-500/40 rounded-xl p-4 flex items-center justify-between bg-amber-950/10">
+                  <div>
+                    <span className="text-[11px] text-amber-400 uppercase font-semibold">Protegidas por Senha</span>
+                    <p className="text-2xl font-black text-amber-400 font-mono mt-0.5">{protectedCount}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-neutral-900/80 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between bg-emerald-950/10">
+                  <div>
+                    <span className="text-[11px] text-emerald-400 uppercase font-semibold">Acesso Livre (Sem Senha)</span>
+                    <p className="text-2xl font-black text-emerald-400 font-mono mt-0.5">{freeCount}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400">
+                    <Unlock className="w-5 h-5" />
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Series Passwords List */}
+          <div className="space-y-4">
+            {series
+              .filter(s => {
+                const q = seriesPasswordSearch.trim().toLowerCase();
+                if (!q) return true;
+                return (
+                  s.title.toLowerCase().includes(q) ||
+                  s.category.toLowerCase().includes(q) ||
+                  s.mentor.toLowerCase().includes(q)
+                );
+              })
+              .map((s) => {
+                const isProtected = Boolean(s.accessPassword && s.accessPassword.trim());
+                const draftValue = seriesPasswordDrafts[s.id] ?? '';
+                const isVisible = Boolean(seriesPasswordVisible[s.id]);
+                const isSaving = savingSeriesPasswordId === s.id;
+                const unlockedUsersCount = allUsers.filter(
+                  u => u.role !== 'admin' && (u.unlockedSeries || []).includes(s.id)
+                ).length;
+                const totalStudentsCount = allUsers.filter(u => u.role !== 'admin').length;
+
+                return (
+                  <div
+                    key={s.id}
+                    className={`bg-neutral-900/90 rounded-2xl border p-4 sm:p-5 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                      isProtected
+                        ? 'border-amber-500/35 hover:border-amber-500/60'
+                        : 'border-neutral-800 hover:border-neutral-700'
+                    }`}
+                  >
+                    {/* Left: Series Thumbnail & Metadata */}
+                    <div className="flex items-start sm:items-center gap-4 min-w-0 flex-1">
+                      <div className="w-24 sm:w-28 aspect-video rounded-xl overflow-hidden bg-neutral-950 border border-neutral-800 shrink-0 relative">
+                        <img
+                          src={s.posterImage || s.heroImage}
+                          alt={s.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/assets/images/skills_hero_leadership_1792881116508.jpg';
+                          }}
+                        />
+                        <div className="absolute top-1 right-1">
+                          {isProtected ? (
+                            <span className="p-1 rounded bg-amber-500 text-neutral-950 inline-flex shadow">
+                              <Lock className="w-3 h-3" />
+                            </span>
+                          ) : (
+                            <span className="p-1 rounded bg-emerald-600 text-white inline-flex shadow">
+                              <Unlock className="w-3 h-3" />
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700">
+                            {s.category}
+                          </span>
+                          {isProtected ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              <span>Protegida por Senha</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                              <Unlock className="w-3 h-3" />
+                              <span>Acesso Livre</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="text-sm sm:text-base font-bold text-white truncate">
+                          {s.title}
+                        </h3>
+
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-400">
+                          <span>Mentor: <strong className="text-neutral-200">{s.mentor}</strong></span>
+                          {isProtected && totalStudentsCount > 0 && (
+                            <span className="text-emerald-400 font-semibold">
+                              • {unlockedUsersCount}/{totalStudentsCount} aluno(s) já desbloquearam
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Password Editor & Quick Actions */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 lg:w-[490px]">
+                      <div className="relative flex-1">
+                        <input
+                          type={isVisible ? 'text' : 'password'}
+                          value={draftValue}
+                          onChange={(e) =>
+                            setSeriesPasswordDrafts(prev => ({ ...prev, [s.id]: e.target.value }))
+                          }
+                          placeholder="Digite ou gere a senha exclusiva..."
+                          className="w-full bg-black/70 text-white font-mono text-xs sm:text-sm rounded-xl pl-3 pr-24 py-2.5 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
+                        />
+
+                        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSeriesPasswordVisible(prev => ({ ...prev, [s.id]: !prev[s.id] }))
+                            }
+                            className="p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                            title={isVisible ? 'Ocultar senha' : 'Visualizar senha'}
+                          >
+                            {isVisible ? <EyeOff className="w-4 h-4 text-amber-400" /> : <Eye className="w-4 h-4" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const generated = generateSeriesPassCode();
+                              setSeriesPasswordDrafts(prev => ({ ...prev, [s.id]: generated }));
+                              setSeriesPasswordVisible(prev => ({ ...prev, [s.id]: true }));
+                            }}
+                            className="px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-[10px] font-bold text-amber-300 border border-neutral-700 transition-colors cursor-pointer"
+                            title="Gerar código aleatório exclusivo"
+                          >
+                            Gerar
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCopySeriesPassword(s.id)}
+                          disabled={!draftValue.trim()}
+                          className="p-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 text-neutral-300 hover:text-white border border-neutral-700 transition-colors cursor-pointer"
+                          title="Copiar senha para enviar ao mentorado"
+                        >
+                          {copiedSeriesPasswordId === s.id ? (
+                            <Check className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => handleSaveSeriesPasswordRow(s.id, draftValue)}
+                          className="px-4 py-2.5 rounded-xl bg-[#E50914] hover:bg-[#b80710] disabled:opacity-50 text-white text-xs font-bold shadow transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
+                        >
+                          {isSaving ? 'Salvando...' : 'Salvar Senha'}
+                        </button>
+
+                        {isProtected && (
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() => {
+                              setSeriesPasswordDrafts(prev => ({ ...prev, [s.id]: '' }));
+                              handleSaveSeriesPasswordRow(s.id, '');
+                            }}
+                            className="px-3 py-2.5 rounded-xl bg-neutral-800 hover:bg-emerald-950/50 text-neutral-300 hover:text-emerald-300 border border-neutral-700 hover:border-emerald-500/40 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                            title="Remover senha e deixar a série com acesso livre"
+                          >
+                            Liberar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+
+          {/* Info Note about Admin Access & Supabase Columns */}
+          <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-4 flex items-start gap-3 text-xs text-neutral-400">
+            <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-neutral-200 font-semibold">
+                Observação Importante para o Administrador & Sincronização Supabase:
+              </p>
+              <p>
+                Como administrador, você possui acesso irrestrito a todas as séries mesmo quando protegidas por senha. Caso utilize o banco de dados Supabase na nuvem, lembre-se de executar o script SQL atualizado (aba <strong>Sincronização Mobile & Nuvem</strong>) para garantir que as colunas <code className="text-amber-300">access_password</code> e <code className="text-amber-300">unlocked_series</code> estejam criadas.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: CRIAR / EDITAR USUÁRIO (REQUIREMENT 1) */}
       {userModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -2567,6 +2930,35 @@ alter table public.episodes add column if not exists is_synopsis boolean default
                     className="w-full bg-neutral-800 text-white rounded px-3 py-2 border border-neutral-700 focus:outline-none focus:border-[#E50914]"
                   />
                 </div>
+              </div>
+
+              {/* Optional Series Access Password Field inside Series Editor */}
+              <div className="p-3.5 rounded-xl bg-neutral-900/90 border border-amber-500/30 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-amber-300 font-bold flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Senha Exclusiva de Acesso da Série (Opcional)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingSeries(prev => ({ ...prev, accessPassword: generateSeriesPassCode() }))
+                    }
+                    className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[10px] font-bold text-amber-300 border border-neutral-700 cursor-pointer"
+                  >
+                    Gerar Senha
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={editingSeries?.accessPassword || ''}
+                  onChange={(e) => setEditingSeries(prev => ({ ...prev, accessPassword: e.target.value }))}
+                  placeholder="Deixe em branco para Acesso Livre ou defina uma senha exclusiva..."
+                  className="w-full bg-neutral-800 text-white font-mono rounded px-3 py-2 border border-neutral-700 focus:outline-none focus:border-amber-400"
+                />
+                <p className="text-[10px] text-neutral-400">
+                  Se preenchida, o aluno precisará informar esta senha para desbloquear e ouvir os episódios desta série.
+                </p>
               </div>
 
               <div className="flex items-center gap-2 pt-2">

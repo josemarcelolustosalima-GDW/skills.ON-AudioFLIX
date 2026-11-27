@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Info, Plus, Check, CheckCircle2 } from 'lucide-react';
+import { Info, Plus, Check, CheckCircle2, Lock, Unlock } from 'lucide-react';
 import { AudioSeries } from '../types';
 
 interface HeroBillboardProps {
@@ -13,6 +13,7 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
     openSeriesModal,
     currentUser,
     toggleMyList,
+    isSeriesLockedForUser,
   } = useApp();
 
   const seriesEpisodes = episodes
@@ -20,6 +21,8 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
     .sort((a, b) => (Number(a.episodeNumber) || 0) - (Number(b.episodeNumber) || 0));
   const trainingEpisodesCount = seriesEpisodes.filter(e => !e.isSynopsis && Number(e.episodeNumber) > 0).length;
   const isInMyList = currentUser.myList.includes(series.id);
+  const hasPasswordProtection = Boolean(series.accessPassword && series.accessPassword.trim());
+  const isLocked = isSeriesLockedForUser(series);
 
   // User progress metrics for this featured series
   const completedEpisodesCount = seriesEpisodes.filter(e => currentUser.listenProgress[e.id]?.completed).length;
@@ -87,6 +90,17 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({ series }) => {
           <span className="px-1.5 py-0.5 bg-neutral-800/80 border border-neutral-700 rounded text-[10px] sm:text-[11px] text-neutral-300 font-medium hidden sm:inline-block">
             {series.audioQuality}
           </span>
+          {isLocked ? (
+            <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 rounded text-[10px] sm:text-[11px] text-amber-300 font-bold flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              <span>Requer Senha</span>
+            </span>
+          ) : hasPasswordProtection ? (
+            <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded text-[10px] sm:text-[11px] text-emerald-300 font-bold flex items-center gap-1">
+              <Unlock className="w-3 h-3" />
+              <span>Liberada</span>
+            </span>
+          ) : null}
         </div>
 
         {/* Synopsis - shrink-0 guarantees flexbox never squashes or cuts off this text */}

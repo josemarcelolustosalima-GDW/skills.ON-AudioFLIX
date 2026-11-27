@@ -128,6 +128,13 @@ interface AppContextType {
   createUser: (userData: { name: string; login: string; password: string; role: 'admin' | 'user'; email?: string }) => Promise<UserProfile>;
   updateUser: (user: UserProfile) => Promise<void>;
   deleteUser: (userId: string) => void;
+  // Series Access Password (Gated Training Progression)
+  seriesUnlockModalTarget: { series: AudioSeries; autoPlayEpisode?: AudioEpisode } | null;
+  closeSeriesUnlockModal: () => void;
+  isSeriesLockedForUser: (targetSeries: AudioSeries | null | undefined) => boolean;
+  setSeriesAccessPassword: (seriesId: string, plainPassword: string) => Promise<void>;
+  unlockSeriesWithPassword: (seriesId: string, inputPassword: string) => Promise<{ success: boolean; message: string }>;
+
   addOrUpdateSeries: (seriesData: AudioSeries) => void;
   setFeaturedSeries: (seriesId: string) => void;
   deleteSeries: (seriesId: string) => void;
@@ -268,6 +275,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Todas');
   const [selectedSeriesForModal, setSelectedSeriesForModal] = useState<AudioSeries | null>(null);
+  const [seriesUnlockModalTarget, setSeriesUnlockModalTarget] = useState<{
+    series: AudioSeries;
+    autoPlayEpisode?: AudioEpisode;
+  } | null>(null);
+  const closeSeriesUnlockModal = () => setSeriesUnlockModalTarget(null);
 
   // Audio Player State
   const [currentPlayingEpisode, setCurrentPlayingEpisode] = useState<AudioEpisode | null>(null);
@@ -545,6 +557,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       name: u.name || existing.name,
                       password: u.password || existing.password,
                       role: u.role || existing.role,
+                      unlockedSeries: Array.from(
+                        new Set([...(existing.unlockedSeries || []), ...(u.unlockedSeries || [])])
+                      ),
                     });
                   } else {
                     userMap.set(key, u);
@@ -727,9 +742,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentPlayingEpisode, currentUser.id]);
 
-  // Play episode action with auto-resume and multi-candidate generation
-  const playEpisode = (episode: AudioEpisode, targetSeries?: AudioSeries) => {
-    const parentSeries = targetSeries || series.find(s => s.id === episode.seriesId) || null;
+  // Check whether a series requires a password and is currently locked for the active user
+  const isSeriesLockedForUser = (targetSeries: AudioSeries | null | undefined): boolean => {
+    if (!targetSeries) return false;
+    if (currentUser.role === 'admin') return false;
+    const hasPassword = Boolean(targetSeries.accessPassword && targetSeries.accessPassword.trim());
+    if (!hasPassword) return false;
+    const unlockedList = currentUser.unlockedSeries || [];
+    return !unlockedList.includes(targetSeries.id);
+  };
+
+  // Internal playback starter (bypass lock check only after lock validation or password unlock)
+  const startEpisodePlayback = (episode: AudioEpisode, parentSeries: AudioSeries | null) => {
     setCurrentPlayingEpisode(episode);
     setCurrentPlayingSeries(parentSeries);
     setIsPlayerExpanded(true);
@@ -786,6 +810,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map(s => (s.id === parentSeries.id ? { ...s, totalListens: s.totalListens + 1 } : s))
       );
     }
+  };
+
+  // Play episode action with password lock guard, auto-resume and multi-candidate generation
+  const playEpisode = (episode: AudioEpisode, targetSeries?: AudioSeries) => {
+    const parentSeries = targetSeries || series.find(s => s.id === episode.seriesId) || null;
+    const latestSeries = parentSeries ? (series.find(s => s.id === parentSeries.id) || parentSeries) : null;
+
+    if (latestSeries && isSeriesLockedForUser(latestSeries)) {
+      setSeriesUnlockModalTarget({ series: latestSeries, autoPlayEpisode: episode });
+      return;
+    }
+
+    startEpisodePlayback(episode, latestSeries);
   };
 
   // Heartbeat & Inactivity Presence Tracker (resolves overnight open tab concern!)
@@ -1272,11 +1309,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const openSeriesModal = (targetSeries: AudioSeries) => {
-    setSelectedSeriesForModal(targetSeries);
+    const latestSeries = series.find(s => s.id === targetSeries.id) || targetSeries;
+    if (isSeriesLockedForUser(latestSeries)) {
+      setSeriesUnlockModalTarget({ series: latestSeries });
+      return;
+    }
+    setSelectedSeriesForModal(latestSeries);
   };
 
   const closeSeriesModal = () => {
     setSelectedSeriesForModal(null);
+  };
+
+  // Set or clear exclusive access password for a series (Admin control)
+  const setSeriesAccessPassword = async (seriesId: string, plainPassword: string): Promise<void> => {
+    const trimmed = plainPassword.trim();
+    const encryptedValue = trimmed ? await encryptPassword(trimmed) : '';
+
+    let updatedTarget: AudioSeries | undefined;
+    setSeries(prev => {
+      const updated = prev.map(s => {
+        if (s.id === seriesId) {
+          updatedTarget = { ...s, accessPassword: encryptedValue };
+          return updatedTarget;
+        }
+        return s;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_SERIES, JSON.stringify(updated));
+      } catch (e) {
+        console.warn(e);
+      }
+      return updated;
+    });
+
+    if (updatedTarget && supabaseConfig.useLiveSupabase && supabaseConfig.supabaseUrl && supabaseConfig.supabaseAnonKey) {
+      pushSingleSeriesToSupabase(supabaseConfig.supabaseUrl, supabaseConfig.supabaseAnonKey, updatedTarget);
+    }
+
+    setSyncNotification(
+      trimmed
+        ? `🔐 Senha exclusiva definida para a série "${updatedTarget?.title || ''}"!`
+        : `🔓 Senha removida! "${updatedTarget?.title || ''}" agora tem acesso livre.`
+    );
+  };
+
+  // Validate series password entered by student/mentee and persist unlock
+  const unlockSeriesWithPassword = async (
+    seriesId: string,
+    inputPassword: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const targetSeries = series.find(s => s.id === seriesId);
+    if (!targetSeries) {
+      return { success: false, message: 'Série não encontrada.' };
+    }
+
+    const stored = targetSeries.accessPassword?.trim() || '';
+    if (stored) {
+      let actualPassword = stored;
+      if (stored.startsWith('enc:') || stored.startsWith('enc_b64:')) {
+        actualPassword = await decryptPassword(stored);
+      }
+
+      if (inputPassword.trim() !== actualPassword.trim()) {
+        return {
+          success: false,
+          message: 'Senha incorreta. Solicite a senha de liberação ao administrador após concluir a atividade da série anterior.',
+        };
+      }
+    }
+
+    const updatedUnlocked = Array.from(new Set([...(currentUser.unlockedSeries || []), seriesId]));
+    const updatedUser: UserProfile = {
+      ...currentUser,
+      unlockedSeries: updatedUnlocked,
+    };
+
+    await updateUser(updatedUser);
+
+    const pendingAutoPlay = seriesUnlockModalTarget?.autoPlayEpisode;
+    setSeriesUnlockModalTarget(null);
+    setSyncNotification(`🔓 Série "${targetSeries.title}" liberada com sucesso! Bons estudos!`);
+
+    if (pendingAutoPlay) {
+      startEpisodePlayback(pendingAutoPlay, targetSeries);
+    } else {
+      setSelectedSeriesForModal(targetSeries);
+    }
+
+    return { success: true, message: 'Acesso liberado!' };
   };
 
   // Background migration: encrypt any plain text passwords with AES-GCM
@@ -1530,6 +1651,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       role: userData.role,
       avatar: '/assets/aistudio/skillsON__INSTAGRAM_6edfb550.jpg',
       myList: [],
+      unlockedSeries: [],
       reactions: {},
       listenProgress: {},
       createdAt: new Date().toISOString(),
@@ -1897,6 +2019,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleMyList,
         openSeriesModal,
         closeSeriesModal,
+        seriesUnlockModalTarget,
+        closeSeriesUnlockModal,
+        isSeriesLockedForUser,
+        setSeriesAccessPassword,
+        unlockSeriesWithPassword,
         setCurrentView,
         setSearchQuery,
         setActiveCategory,
